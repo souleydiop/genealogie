@@ -193,9 +193,58 @@
   .person-row .info{flex:1;min-width:0;}
   .person-row .name{font-weight:700;font-size:15px;}
   .person-row .meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .gen-badge{
+    font-size:10px;font-weight:700;color:var(--primary);
+    background:var(--accent-soft);
+    border-radius:6px;padding:3px 7px;
+    flex-shrink:0;letter-spacing:.04em;
+  }
   .chev{color:var(--line);font-size:18px;}
 
-  /* ---- Arbre (tree) ---- */
+  /* ---- Arbre toolbar ---- */
+  .tree-toolbar{
+    position:sticky;top:0;z-index:10;
+    background:var(--bg);
+    padding:10px 14px 8px;
+    border-bottom:1px solid var(--line);
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .tree-toolbar select{
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:var(--surface);
+    font-family:inherit;
+    font-size:13px;
+    color:var(--ink);
+    padding:9px 10px;
+  }
+  #treeFocus{width:100%;}
+  .tree-toolbar-row2{display:flex;align-items:center;gap:10px;}
+  .gen-filter{display:flex;align-items:center;gap:6px;flex:1;}
+  .gen-filter .eyebrow{margin:0;flex-shrink:0;}
+  .gen-filter select{flex:1;min-width:0;padding:9px 6px;text-align:center;}
+  .sep-arrow{color:var(--ink-soft);font-size:12px;flex-shrink:0;}
+  .zoom-controls{display:flex;gap:6px;flex-shrink:0;}
+  .zoom-controls button{
+    width:36px;height:36px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--primary);
+    font-size:18px;font-weight:700;
+    font-family:inherit;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .tree-toolbar-info{
+    font-size:12px;color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+  }
+  .tree-toolbar-info button{
+    border:none;background:none;color:var(--primary);font-weight:700;
+    font-size:12px;font-family:inherit;padding:0;flex-shrink:0;
+  }
+
+  /* ---- Arbre ---- */
   .tree-scroll{
     overflow:auto;
     padding:18px;
@@ -233,6 +282,25 @@
   svg.connectors{position:absolute;top:0;left:0;pointer-events:none;z-index:1;}
   .branch{fill:none;stroke:var(--accent);stroke-width:2;opacity:.55;}
   .union{stroke:var(--primary-light);stroke-width:2;opacity:.5;}
+
+  /* Niveaux de zoom de l'arbre */
+  .tree-grid.zoom-0 .gen-row{gap:16px;margin-bottom:34px;}
+  .tree-grid.zoom-0 .card{width:78px;padding:6px;}
+  .tree-grid.zoom-0 .card .avatar{width:36px;height:36px;margin-bottom:4px;}
+  .tree-grid.zoom-0 .card .name{font-size:10.5px;}
+  .tree-grid.zoom-0 .card .dates{font-size:9px;margin-top:1px;}
+  .tree-grid.zoom-0 .gen-label{font-size:9px;}
+
+  .tree-grid.zoom-1 .gen-row{gap:28px;margin-bottom:54px;}
+  .tree-grid.zoom-1 .card{width:104px;padding:10px;}
+
+  .tree-grid.zoom-2 .gen-row{gap:40px;margin-bottom:70px;}
+  .tree-grid.zoom-2 .card{width:136px;padding:13px;}
+  .tree-grid.zoom-2 .card .avatar{width:60px;height:60px;}
+  .tree-grid.zoom-2 .card .name{font-size:14px;}
+  .tree-grid.zoom-2 .card .dates{font-size:12px;}
+
+  .card.focus-root{box-shadow:0 0 0 3px var(--accent);}
 
   /* ---- Données ---- */
   .data-wrap{padding:18px 16px;}
@@ -335,6 +403,24 @@
   <main>
     <!-- ARBRE -->
     <section class="view" id="view-arbre">
+      <div class="tree-toolbar" id="treeToolbar">
+        <select id="treeFocus" onchange="renderTree()">
+          <option value="">🌳 Arbre complet</option>
+        </select>
+        <div class="tree-toolbar-row2">
+          <div class="gen-filter">
+            <span class="eyebrow">Génér.</span>
+            <select id="genFrom" onchange="onGenFilterChange()"></select>
+            <span class="sep-arrow">→</span>
+            <select id="genTo" onchange="onGenFilterChange()"></select>
+          </div>
+          <div class="zoom-controls">
+            <button type="button" onclick="zoomTree(-1)" aria-label="Réduire">−</button>
+            <button type="button" onclick="zoomTree(1)" aria-label="Agrandir">+</button>
+          </div>
+        </div>
+        <div class="tree-toolbar-info" id="treeFilterInfo" style="display:none;"></div>
+      </div>
       <div class="tree-scroll" id="treeScroll">
         <div id="treeEmpty" class="empty" style="display:none;">
           <div class="ic">🌳</div>
@@ -342,7 +428,13 @@
           <p>Ajoutez la première personne pour commencer à construire votre arbre généalogique.</p>
           <button class="btn" onclick="openPersonForm()">+ Ajouter une personne</button>
         </div>
-        <div class="tree-grid" id="treeGrid"></div>
+        <div id="treeFiltered" class="empty" style="display:none;">
+          <div class="ic">🔍</div>
+          <h2>Aucun résultat</h2>
+          <p>Aucune personne ne correspond à ces filtres.</p>
+          <button class="btn outline" onclick="resetTreeFilters()">Réinitialiser les filtres</button>
+        </div>
+        <div class="tree-grid zoom-1" id="treeGrid"></div>
       </div>
     </section>
 
@@ -429,6 +521,7 @@
       <button class="btn secondary" onclick="quickAdd('enfant')">👶 Ajouter un enfant</button>
       <button class="btn secondary" onclick="editCurrentPerson()">✏️ Modifier</button>
     </div>
+    <button class="btn outline block" style="margin-bottom:8px;" onclick="focusInTree()">🎯 Centrer l'arbre sur cette personne</button>
     <button class="btn outline block" onclick="closeDetail()">Fermer</button>
     <hr class="sep">
     <button class="btn danger block" onclick="deleteCurrentPerson()">🗑️ Supprimer cette personne</button>
@@ -605,6 +698,7 @@ init();
 
 function renderAll(){
   renderPersonsList();
+  populateTreeFilters();
   renderTree();
   renderStats();
 }
@@ -635,16 +729,31 @@ function renderPersonsList(){
     return;
   }
   empty.style.display='none';
+  const gen=computeGenerations();
   list.innerHTML=filtered.map(p=>`
     <div class="person-row sexe-${p.sexe}" onclick="openDetail('${p.id}')">
       <div class="avatar">${p.photo?`<img src="${p.photo}">`:initials(p)}</div>
       <div class="info">
         <div class="name">${escapeHtml(fullName(p))}</div>
-        <div class="meta">${dateRange(p)||'\u00A0'}</div>
+        <div class="meta">${personSubtitle(p)}</div>
       </div>
+      <div class="gen-badge">G${(gen[p.id]||0)+1}</div>
       <div class="chev">›</div>
     </div>
   `).join('') || `<p style="text-align:center;color:var(--ink-soft);padding:30px 0;">Aucun résultat</p>`;
+}
+
+function personSubtitle(p){
+  const parts=[];
+  const dr=dateRange(p);
+  if(dr) parts.push(dr);
+  if(p.lieu) parts.push(p.lieu);
+  const parentNames=(p.parents||[]).map(pid=>byId(pid)).filter(Boolean).map(fullName);
+  if(parentNames.length){
+    const rel = p.sexe==='F' ? 'Fille de' : p.sexe==='H' ? 'Fils de' : 'Enfant de';
+    parts.push(rel+' '+parentNames.join(' & '));
+  }
+  return parts.join(' · ')||'\u00A0';
 }
 
 function escapeHtml(s){
@@ -652,6 +761,8 @@ function escapeHtml(s){
 }
 
 /* =================== ARBRE =================== */
+let treeZoom=1; // 0=compact, 1=normal, 2=grand
+
 function computeGenerations(){
   const gen={};
   function getGen(id,visited){
@@ -669,20 +780,136 @@ function computeGenerations(){
   return gen;
 }
 
+// Ancêtres + descendants + conjoints autour d'une personne (vue centrée)
+function getFocusedSet(focusId){
+  if(!byId(focusId)) return null;
+  const include=new Set([focusId]);
+  function addAncestors(id){
+    const p=byId(id);
+    (p.parents||[]).forEach(pid=>{
+      if(byId(pid) && !include.has(pid)){ include.add(pid); addAncestors(pid); }
+    });
+  }
+  function addDescendants(id){
+    persons.filter(x=>(x.parents||[]).includes(id)).forEach(c=>{
+      if(!include.has(c.id)){ include.add(c.id); addDescendants(c.id); }
+    });
+  }
+  addAncestors(focusId);
+  addDescendants(focusId);
+  // conjoints des personnes incluses, pour le contexte
+  Array.from(include).forEach(id=>{
+    const p=byId(id);
+    (p.conjoints||[]).forEach(cid=>{ if(byId(cid)) include.add(cid); });
+  });
+  return include;
+}
+
+let lastMaxGen=-1;
+// Remplit les sélecteurs de filtre (personne ciblée + plage de générations)
+function populateTreeFilters(){
+  const focusSel=document.getElementById('treeFocus');
+  const prevFocus=focusSel.value;
+  const sortedP=[...persons].sort((a,b)=>fullName(a).localeCompare(fullName(b)));
+  focusSel.innerHTML='<option value="">🌳 Arbre complet</option>'+
+    sortedP.map(p=>`<option value="${p.id}">🎯 Centrer sur ${escapeHtml(fullName(p))}</option>`).join('');
+  if(sortedP.some(p=>p.id===prevFocus)) focusSel.value=prevFocus;
+
+  const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
+  const prevFrom=fromSel.value, prevTo=toSel.value;
+  let maxGen=0;
+  if(persons.length){
+    const gen=computeGenerations();
+    maxGen=Math.max(...Object.values(gen));
+  }
+  let opts='';
+  for(let g=0;g<=maxGen;g++) opts+=`<option value="${g+1}">${g+1}</option>`;
+  fromSel.innerHTML=opts; toSel.innerHTML=opts;
+
+  // Si l'utilisateur n'a pas restreint la plage (toujours "plage complète"), on la suit automatiquement
+  const wasFullRange = prevFrom==='' || (prevFrom==='1' && prevTo===String(lastMaxGen+1));
+  if(wasFullRange){
+    fromSel.value='1';
+    toSel.value=String(maxGen+1);
+  }else{
+    fromSel.value = (+prevFrom<=maxGen+1) ? prevFrom : '1';
+    toSel.value = (+prevTo<=maxGen+1 && +prevTo>=+fromSel.value) ? prevTo : String(maxGen+1);
+  }
+  lastMaxGen=maxGen;
+}
+
+function onGenFilterChange(){
+  const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
+  if(+fromSel.value>+toSel.value) toSel.value=fromSel.value;
+  renderTree();
+}
+
+function resetTreeFilters(){
+  document.getElementById('treeFocus').value='';
+  const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
+  if(fromSel.options.length) fromSel.value=fromSel.options[0].value;
+  if(toSel.options.length) toSel.value=toSel.options[toSel.options.length-1].value;
+  renderTree();
+}
+
+function zoomTree(delta){
+  treeZoom=Math.min(2,Math.max(0,treeZoom+delta));
+  const grid=document.getElementById('treeGrid');
+  grid.classList.remove('zoom-0','zoom-1','zoom-2');
+  grid.classList.add('zoom-'+treeZoom);
+  requestAnimationFrame(drawConnectors);
+}
+
 function renderTree(){
   const grid=document.getElementById('treeGrid');
   const emptyEl=document.getElementById('treeEmpty');
+  const filteredEl=document.getElementById('treeFiltered');
+  const toolbar=document.getElementById('treeToolbar');
+  const infoEl=document.getElementById('treeFilterInfo');
+
   if(persons.length===0){
     emptyEl.style.display='flex';
+    filteredEl.style.display='none';
+    infoEl.style.display='none';
+    toolbar.style.display='none';
+    grid.innerHTML='';
+    return;
+  }
+  toolbar.style.display='flex';
+  const gen=computeGenerations();
+  const maxGen=Math.max(...Object.values(gen));
+
+  const focusId=document.getElementById('treeFocus').value;
+  const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
+  const genFrom=(+fromSel.value||1)-1;
+  const genTo=(+toSel.value||(maxGen+1))-1;
+  const focusSet = focusId ? getFocusedSet(focusId) : null;
+
+  const byGen={};
+  for(let g=0;g<=maxGen;g++) byGen[g]=[];
+  persons.forEach(p=>{
+    if(focusSet && !focusSet.has(p.id)) return;
+    if(gen[p.id]<genFrom || gen[p.id]>genTo) return;
+    byGen[gen[p.id]].push(p);
+  });
+  const totalShown=Object.values(byGen).reduce((s,a)=>s+a.length,0);
+
+  const filtersActive = !!focusId || genFrom>0 || genTo<maxGen;
+  if(filtersActive){
+    infoEl.style.display='flex';
+    infoEl.innerHTML=`<span>${totalShown} / ${persons.length} personnes affichées</span><button onclick="resetTreeFilters()">Réinitialiser</button>`;
+  }else{
+    infoEl.style.display='none';
+  }
+
+  if(totalShown===0){
+    emptyEl.style.display='none';
+    filteredEl.style.display='flex';
     grid.innerHTML='';
     return;
   }
   emptyEl.style.display='none';
-  const gen=computeGenerations();
-  const maxGen=Math.max(...Object.values(gen));
-  const byGen={};
-  for(let g=0;g<=maxGen;g++) byGen[g]=[];
-  persons.forEach(p=>byGen[gen[p.id]].push(p));
+  filteredEl.style.display='none';
 
   // order within generation: try to keep couples adjacent & group by parents
   for(let g=0;g<=maxGen;g++){
@@ -708,6 +935,7 @@ function renderTree(){
 
   let html='';
   for(let g=0;g<=maxGen;g++){
+    if(byGen[g].length===0) continue;
     html+=`<div class="gen-row" data-gen="${g}"><div class="gen-label">Génération ${g+1}</div>`;
     const arr=byGen[g];
     let i=0;
@@ -716,21 +944,23 @@ function renderTree(){
       const next=arr[i+1];
       const isCouple = next && p.conjoints && p.conjoints.includes(next.id);
       if(isCouple){
-        html+=`<div class="couple">${cardHtml(p)}<span class="heart">♥</span>${cardHtml(next)}</div>`;
+        html+=`<div class="couple">${cardHtml(p,focusId)}<span class="heart">♥</span>${cardHtml(next,focusId)}</div>`;
         i+=2;
       }else{
-        html+=cardHtml(p);
+        html+=cardHtml(p,focusId);
         i+=1;
       }
     }
     html+='</div>';
   }
+  grid.className='tree-grid zoom-'+treeZoom;
   grid.innerHTML = `<svg class="connectors" id="connSvg"></svg>` + html;
   requestAnimationFrame(drawConnectors);
 }
 
-function cardHtml(p){
-  return `<div class="card sexe-${p.sexe}" data-id="${p.id}" onclick="openDetail('${p.id}')">
+function cardHtml(p,focusId){
+  const cls = (focusId && p.id===focusId) ? ' focus-root' : '';
+  return `<div class="card sexe-${p.sexe}${cls}" data-id="${p.id}" onclick="openDetail('${p.id}')">
     <div class="avatar">${p.photo?`<img src="${p.photo}">`:initials(p)}</div>
     <div class="name">${escapeHtml(fullName(p))}</div>
     <div class="dates">${dateRange(p)||'\u00A0'}</div>
@@ -840,6 +1070,14 @@ function quickAdd(type){
   pendingQuickAction={type,forId:currentDetailId};
   closeDetail();
   openPersonForm(null);
+}
+function focusInTree(){
+  const id=currentDetailId;
+  closeDetail();
+  switchView('arbre');
+  populateTreeFilters();
+  document.getElementById('treeFocus').value=id;
+  renderTree();
 }
 
 /* =================== FORMULAIRE =================== */
