@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3F5E4A">
+<title>Arbre Généalogique</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg:#F8F4EC;
+    --surface:#FFFFFF;
+    --ink:#2B2118;
+    --ink-soft:#7A6C5D;
+    --primary:#3F5E4A;
+    --primary-light:#5C7C66;
+    --accent:#C7923A;
+    --accent-soft:#EFD9B0;
+    --line:#E2D9C8;
+    --male:#4F7A8B;
+    --female:#B5707A;
+    --autre:#8B5E3C;
+    --danger:#B0413E;
+    --radius:14px;
+    --safe-top:env(safe-area-inset-top,0px);
+    --safe-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    overscroll-behavior:none;
+  }
+  h1,h2,h3,.display{
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:600;
+  }
+  .eyebrow{
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:600;
+  }
+
+  /* App shell */
+  #app{display:flex;flex-direction:column;height:100vh;}
+  header.topbar{
+    padding:calc(10px + var(--safe-top)) 18px 12px;
+    background:var(--primary);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-shrink:0;
+  }
+  header.topbar h1{
+    font-size:20px;
+    margin:0;
+    letter-spacing:.02em;
+  }
+  header.topbar .sub{
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--accent-soft);
+    opacity:.85;
+  }
+  .icon-btn{
+    background:rgba(255,255,255,.15);
+    border:none;
+    color:#fff;
+    width:38px;height:38px;
+    border-radius:10px;
+    font-size:18px;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  main{flex:1;overflow:hidden;position:relative;}
+  .view{
+    position:absolute;inset:0;
+    overflow:auto;
+    display:none;
+    padding-bottom:calc(78px + var(--safe-bottom));
+  }
+  .view.active{display:block;}
+
+  /* Bottom nav */
+  nav.bottomnav{
+    flex-shrink:0;
+    display:flex;
+    background:var(--surface);
+    border-top:1px solid var(--line);
+    padding-bottom:var(--safe-bottom);
+    position:fixed;
+    bottom:0;left:0;right:0;
+  }
+  nav.bottomnav button{
+    flex:1;
+    border:none;
+    background:none;
+    padding:10px 4px 8px;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    color:var(--ink-soft);
+    font-family:inherit;
+  }
+  nav.bottomnav button .ic{font-size:20px;line-height:1;}
+  nav.bottomnav button .lb{font-size:11px;letter-spacing:.04em;font-weight:600;}
+  nav.bottomnav button.active{color:var(--primary);}
+  nav.bottomnav button.active .ic{transform:translateY(-1px);}
+
+  /* Empty state */
+  .empty{
+    display:flex;flex-direction:column;align-items:center;
+    text-align:center;
+    padding:60px 32px;
+    color:var(--ink-soft);
+  }
+  .empty .ic{font-size:48px;margin-bottom:14px;}
+  .empty h2{color:var(--ink);font-size:20px;margin:0 0 8px;}
+  .empty p{font-size:14px;line-height:1.5;margin:0 0 20px;}
+
+  .btn{
+    border:none;
+    border-radius:999px;
+    padding:12px 22px;
+    font-size:14px;
+    font-weight:600;
+    font-family:inherit;
+    background:var(--primary);
+    color:#fff;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn.secondary{background:var(--accent-soft);color:var(--primary);}
+  .btn.outline{background:transparent;color:var(--primary);border:1px solid var(--primary);}
+  .btn.danger{background:var(--danger);}
+  .btn.block{width:100%;justify-content:center;}
+  .btn:active{transform:scale(.98);}
+
+  /* FAB */
+  .fab{
+    position:fixed;
+    right:18px;
+    bottom:calc(90px + var(--safe-bottom));
+    width:56px;height:56px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    font-size:26px;
+    border:none;
+    box-shadow:0 6px 16px rgba(60,40,10,.28);
+    z-index:30;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* ---- Personnes (list) ---- */
+  .list-wrap{padding:14px 16px 8px;}
+  .search{
+    width:100%;
+    padding:11px 14px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    font-size:14px;
+    font-family:inherit;
+    margin-bottom:12px;
+  }
+  .person-row{
+    display:flex;align-items:center;gap:12px;
+    background:var(--surface);
+    border-radius:var(--radius);
+    padding:10px 12px;
+    margin-bottom:8px;
+    border-left:5px solid var(--ink-soft);
+  }
+  .person-row.sexe-H{border-left-color:var(--male);}
+  .person-row.sexe-F{border-left-color:var(--female);}
+  .person-row.sexe-A{border-left-color:var(--autre);}
+  .avatar{
+    width:44px;height:44px;border-radius:50%;
+    background:var(--accent-soft);
+    color:var(--primary);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;
+    overflow:hidden;flex-shrink:0;
+    font-family:Georgia,serif;
+  }
+  .avatar img{width:100%;height:100%;object-fit:cover;}
+  .person-row .info{flex:1;min-width:0;}
+  .person-row .name{font-weight:700;font-size:15px;}
+  .person-row .meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .chev{color:var(--line);font-size:18px;}
+
+  /* ---- Arbre (tree) ---- */
+  .tree-scroll{
+    overflow:auto;
+    padding:18px;
+    min-height:100%;
+  }
+  .tree-grid{position:relative;display:inline-block;min-width:100%;}
+  .gen-row{display:flex;gap:28px;margin-bottom:54px;align-items:flex-start;}
+  .gen-label{
+    position:sticky;left:0;
+    writing-mode:vertical-rl;
+    text-orientation:mixed;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-soft);
+    align-self:center;
+  }
+  .couple{display:flex;align-items:center;gap:6px;}
+  .heart{color:var(--accent);font-size:13px;}
+  .card{
+    background:var(--surface);
+    border-radius:var(--radius);
+    border:1px solid var(--line);
+    padding:10px;
+    width:104px;
+    text-align:center;
+    box-shadow:0 2px 6px rgba(60,40,10,.05);
+    position:relative;
+    z-index:2;
+  }
+  .card .avatar{margin:0 auto 6px;width:48px;height:48px;}
+  .card .name{font-size:12.5px;font-weight:700;line-height:1.2;}
+  .card .dates{font-size:10.5px;color:var(--ink-soft);margin-top:3px;}
+  .card.sexe-H{border-top:3px solid var(--male);}
+  .card.sexe-F{border-top:3px solid var(--female);}
+  .card.sexe-A{border-top:3px solid var(--autre);}
+  svg.connectors{position:absolute;top:0;left:0;pointer-events:none;z-index:1;}
+  .branch{fill:none;stroke:var(--accent);stroke-width:2;opacity:.55;}
+  .union{stroke:var(--primary-light);stroke-width:2;opacity:.5;}
+
+  /* ---- Données ---- */
+  .data-wrap{padding:18px 16px;}
+  .data-card{
+    background:var(--surface);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:14px;
+    border:1px solid var(--line);
+  }
+  .data-card h3{margin:0 0 4px;font-size:16px;}
+  .data-card p{font-size:13px;color:var(--ink-soft);line-height:1.5;margin:0 0 12px;}
+  .stat{
+    display:flex;justify-content:space-between;
+    font-size:13px;padding:6px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .stat:last-child{border-bottom:none;}
+  .stat b{font-family:Georgia,serif;font-size:16px;color:var(--primary);}
+
+  /* ---- Modal / bottom sheet ---- */
+  .overlay{
+    position:fixed;inset:0;
+    background:rgba(43,33,24,.45);
+    display:none;
+    z-index:50;
+    align-items:flex-end;
+  }
+  .overlay.active{display:flex;}
+  .sheet{
+    background:var(--surface);
+    width:100%;
+    max-height:88vh;
+    border-radius:20px 20px 0 0;
+    padding:18px 18px calc(18px + var(--safe-bottom));
+    overflow:auto;
+    animation:slideUp .22s ease-out;
+  }
+  @keyframes slideUp{from{transform:translateY(40px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .sheet-handle{
+    width:40px;height:4px;background:var(--line);border-radius:99px;margin:0 auto 14px;
+  }
+  .sheet h2{margin:0 0 14px;font-size:19px;}
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:700;margin-bottom:6px;
+  }
+  .field input,.field select,.field textarea{
+    width:100%;
+    padding:11px 12px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    font-size:15px;
+    font-family:inherit;
+    background:#FCFAF5;
+    color:var(--ink);
+  }
+  .field textarea{resize:vertical;min-height:60px;}
+  .row2{display:flex;gap:10px;}
+  .row2 .field{flex:1;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+  .chip{
+    display:flex;align-items:center;gap:6px;
+    background:var(--accent-soft);color:var(--primary);
+    border-radius:999px;padding:6px 10px;font-size:13px;font-weight:600;
+  }
+  .chip button{border:none;background:none;color:var(--primary);font-size:14px;font-weight:700;padding:0;}
+  .photo-pick{
+    display:flex;align-items:center;gap:12px;
+  }
+  .photo-pick .avatar{width:56px;height:56px;font-size:18px;}
+  .actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;}
+  .actions-grid .btn{font-size:13px;padding:11px 10px;}
+  hr.sep{border:none;border-top:1px solid var(--line);margin:14px 0;}
+
+  .toast{
+    position:fixed;bottom:calc(90px + var(--safe-bottom));left:50%;
+    transform:translateX(-50%);
+    background:var(--ink);color:#fff;
+    padding:10px 18px;border-radius:999px;font-size:13px;
+    z-index:80;opacity:0;transition:opacity .25s;
+    pointer-events:none;white-space:nowrap;
+  }
+  .toast.show{opacity:1;}
+
+  input[type=file]{font-size:13px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div>
+      <h1 id="headerTitle">Arbre Généalogique</h1>
+      <div class="sub" id="headerSub">Personnes</div>
+    </div>
+    <button class="icon-btn" id="btnHeaderAction" title="Action" style="display:none;">⤓</button>
+  </header>
+
+  <main>
+    <!-- ARBRE -->
+    <section class="view" id="view-arbre">
+      <div class="tree-scroll" id="treeScroll">
+        <div id="treeEmpty" class="empty" style="display:none;">
+          <div class="ic">🌳</div>
+          <h2>Votre arbre est vide</h2>
+          <p>Ajoutez la première personne pour commencer à construire votre arbre généalogique.</p>
+          <button class="btn" onclick="openPersonForm()">+ Ajouter une personne</button>
+        </div>
+        <div class="tree-grid" id="treeGrid"></div>
+      </div>
+    </section>
+
+    <!-- PERSONNES -->
+    <section class="view active" id="view-personnes">
+      <div class="list-wrap">
+        <input class="search" id="searchInput" placeholder="🔍 Rechercher une personne…" oninput="renderPersonsList()">
+        <div id="personsEmpty" class="empty" style="display:none;">
+          <div class="ic">👤</div>
+          <h2>Aucune personne</h2>
+          <p>Commencez par ajouter un premier membre de la famille.</p>
+          <button class="btn" onclick="openPersonForm()">+ Ajouter une personne</button>
+        </div>
+        <div id="personsList"></div>
+      </div>
+    </section>
+
+    <!-- DONNÉES -->
+    <section class="view" id="view-donnees">
+      <div class="data-wrap">
+        <div class="data-card">
+          <h3>📊 Aperçu</h3>
+          <div class="stat"><span>Personnes enregistrées</span><b id="statCount">0</b></div>
+          <div class="stat"><span>Générations</span><b id="statGen">0</b></div>
+        </div>
+
+        <div class="data-card">
+          <h3>⬇️ Exporter (sauvegarde)</h3>
+          <p>Téléchargez toutes vos données dans un fichier JSON. Enregistrez-le ensuite sur Google Drive depuis le menu de partage pour le mettre en sécurité.</p>
+          <button class="btn block" onclick="exportData()">Exporter vers un fichier</button>
+        </div>
+
+        <div class="data-card">
+          <h3>⬆️ Importer</h3>
+          <p>Restaurez vos données depuis un fichier JSON précédemment exporté (par ex. depuis Google Drive). Cela remplacera les données actuelles.</p>
+          <input type="file" id="importFile" accept="application/json,.json" style="display:none;" onchange="importData(this.files[0])">
+          <button class="btn block secondary" onclick="document.getElementById('importFile').click()">Choisir un fichier à importer</button>
+        </div>
+
+        <div class="data-card">
+          <h3>🗑️ Réinitialiser</h3>
+          <p>Supprime définitivement toutes les personnes de l'application. Pensez à exporter avant si besoin.</p>
+          <button class="btn block danger" onclick="resetAll()">Tout effacer</button>
+        </div>
+
+        <div class="data-card">
+          <h3>ℹ️ À propos</h3>
+          <p>Application installée en PWA — toutes les données restent sur votre téléphone (stockage local). Utilisez l'export/import pour les sauvegarder ou les transférer.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottomnav">
+    <button id="nav-arbre" onclick="switchView('arbre')">
+      <span class="ic">🌳</span><span class="lb">Arbre</span>
+    </button>
+    <button id="nav-personnes" class="active" onclick="switchView('personnes')">
+      <span class="ic">👥</span><span class="lb">Personnes</span>
+    </button>
+    <button id="nav-donnees" onclick="switchView('donnees')">
+      <span class="ic">💾</span><span class="lb">Données</span>
+    </button>
+  </nav>
+
+  <button class="fab" id="fabAdd" onclick="openPersonForm()">+</button>
+</div>
+
+<!-- Détail personne (bottom sheet) -->
+<div class="overlay" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+      <div class="avatar" id="detailAvatar" style="width:56px;height:56px;font-size:18px;"></div>
+      <div>
+        <h2 id="detailName" style="margin:0;font-size:18px;"></h2>
+        <div class="eyebrow" id="detailDates"></div>
+      </div>
+    </div>
+    <div id="detailNotes" style="font-size:14px;color:var(--ink-soft);margin-bottom:14px;"></div>
+    <div class="actions-grid">
+      <button class="btn secondary" onclick="quickAdd('parent')">👪 Ajouter un parent</button>
+      <button class="btn secondary" onclick="quickAdd('conjoint')">💍 Ajouter un conjoint</button>
+      <button class="btn secondary" onclick="quickAdd('enfant')">👶 Ajouter un enfant</button>
+      <button class="btn secondary" onclick="editCurrentPerson()">✏️ Modifier</button>
+    </div>
+    <button class="btn outline block" onclick="closeDetail()">Fermer</button>
+    <hr class="sep">
+    <button class="btn danger block" onclick="deleteCurrentPerson()">🗑️ Supprimer cette personne</button>
+  </div>
+</div>
+
+<!-- Formulaire personne (bottom sheet) -->
+<div class="overlay" id="formOverlay" onclick="if(event.target===this)closeForm()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="formTitle">Ajouter une personne</h2>
+    <form id="personForm" onsubmit="savePerson(event)">
+      <div class="field photo-pick">
+        <div class="avatar" id="formAvatarPreview">＋</div>
+        <div style="flex:1;">
+          <label style="margin-bottom:8px;">Photo (optionnel)</label>
+          <input type="file" accept="image/*" id="formPhoto" onchange="onPhotoChange(this)">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Prénom *</label>
+          <input type="text" id="formPrenom" required>
+        </div>
+        <div class="field">
+          <label>Nom</label>
+          <input type="text" id="formNom">
+        </div>
+      </div>
+      <div class="field">
+        <label>Sexe</label>
+        <select id="formSexe">
+          <option value="H">Homme</option>
+          <option value="F">Femme</option>
+          <option value="A">Autre</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Naissance</label>
+          <input type="date" id="formNaissance">
+        </div>
+        <div class="field">
+          <label>Décès</label>
+          <input type="date" id="formDeces">
+        </div>
+      </div>
+      <div class="field">
+        <label>Lieu de naissance</label>
+        <input type="text" id="formLieu" placeholder="Ville, pays…">
+      </div>
+
+      <div class="field">
+        <label>Parents</label>
+        <div class="row2">
+          <select id="formParent1"></select>
+          <select id="formParent2"></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Conjoint(s)</label>
+        <div class="chips" id="conjointChips"></div>
+        <select id="formConjointAdd" onchange="addConjointChip(this.value);this.value='';"></select>
+      </div>
+
+      <div class="field">
+        <label>Notes</label>
+        <textarea id="formNotes" placeholder="Anecdotes, métier, origine…"></textarea>
+      </div>
+
+      <button type="submit" class="btn block">Enregistrer</button>
+      <button type="button" class="btn outline block" style="margin-top:10px;" onclick="closeForm()">Annuler</button>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =================== STOCKAGE (IndexedDB) =================== */
+const DB_NAME='genealogie_db', STORE='personnes';
+let db=null;
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,1);
+    req.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE,{keyPath:'id'});
+    };
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e);
+  });
+}
+async function dbAll(){
+  db=db||await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readonly');
+    const r=tx.objectStore(STORE).getAll();
+    r.onsuccess=()=>res(r.result);
+    r.onerror=e=>rej(e);
+  });
+}
+async function dbPut(p){
+  db=db||await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).put(p);
+    tx.oncomplete=()=>res();
+    tx.onerror=e=>rej(e);
+  });
+}
+async function dbDelete(id){
+  db=db||await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete=()=>res();
+    tx.onerror=e=>rej(e);
+  });
+}
+async function dbClear(){
+  db=db||await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete=()=>res();
+    tx.onerror=e=>rej(e);
+  });
+}
+async function dbBulkReplace(list){
+  db=db||await openDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readwrite');
+    const store=tx.objectStore(STORE);
+    store.clear();
+    list.forEach(p=>store.put(p));
+    tx.oncomplete=()=>res();
+    tx.onerror=e=>rej(e);
+  });
+}
+
+/* =================== ÉTAT =================== */
+let persons=[]; // {id,prenom,nom,sexe,naissance,deces,lieu,photo,parents:[],conjoints:[],notes}
+let currentDetailId=null;
+let editingId=null;
+let pendingQuickAction=null; // {type:'parent'|'conjoint'|'enfant', forId}
+
+function uid(){return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);}
+function byId(id){return persons.find(p=>p.id===id);}
+function fullName(p){return [p.prenom,p.nom].filter(Boolean).join(' ');}
+function initials(p){
+  const a=(p.prenom||'')[0]||'', b=(p.nom||'')[0]||'';
+  return (a+b).toUpperCase()||'?';
+}
+function yearOf(d){return d?d.slice(0,4):'';}
+function dateRange(p){
+  const n=yearOf(p.naissance), d=yearOf(p.deces);
+  if(!n && !d) return '';
+  if(n && !d) return n+' – présent';
+  if(n && d) return n+' – '+d;
+  return '? – '+d;
+}
+
+/* =================== INIT =================== */
+async function init(){
+  persons=await dbAll();
+  renderAll();
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}
+init();
+
+function renderAll(){
+  renderPersonsList();
+  renderTree();
+  renderStats();
+}
+
+/* =================== NAVIGATION =================== */
+function switchView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.bottomnav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  const fab=document.getElementById('fabAdd');
+  fab.style.display = (name==='donnees') ? 'none' : 'flex';
+  const titles={arbre:["Arbre Généalogique","Vue d'ensemble"],personnes:["Arbre Généalogique","Personnes"],donnees:["Arbre Généalogique","Données"]};
+  document.getElementById('headerSub').textContent=titles[name][1];
+  if(name==='arbre') setTimeout(renderTree,30);
+}
+
+/* =================== LISTE PERSONNES =================== */
+function renderPersonsList(){
+  const q=(document.getElementById('searchInput').value||'').toLowerCase().trim();
+  const list=document.getElementById('personsList');
+  const empty=document.getElementById('personsEmpty');
+  const sorted=[...persons].sort((a,b)=>fullName(a).localeCompare(fullName(b)));
+  const filtered=sorted.filter(p=>fullName(p).toLowerCase().includes(q));
+  if(persons.length===0){
+    empty.style.display='flex';
+    list.innerHTML='';
+    return;
+  }
+  empty.style.display='none';
+  list.innerHTML=filtered.map(p=>`
+    <div class="person-row sexe-${p.sexe}" onclick="openDetail('${p.id}')">
+      <div class="avatar">${p.photo?`<img src="${p.photo}">`:initials(p)}</div>
+      <div class="info">
+        <div class="name">${escapeHtml(fullName(p))}</div>
+        <div class="meta">${dateRange(p)||'\u00A0'}</div>
+      </div>
+      <div class="chev">›</div>
+    </div>
+  `).join('') || `<p style="text-align:center;color:var(--ink-soft);padding:30px 0;">Aucun résultat</p>`;
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* =================== ARBRE =================== */
+function computeGenerations(){
+  const gen={};
+  function getGen(id,visited){
+    if(gen[id]!==undefined) return gen[id];
+    if(visited.has(id)) return gen[id]=0;
+    visited.add(id);
+    const p=byId(id);
+    if(!p || !p.parents || p.parents.length===0){gen[id]=0;return 0;}
+    let max=-1;
+    p.parents.forEach(pid=>{ if(byId(pid)) max=Math.max(max,getGen(pid,visited)); });
+    gen[id]=max+1;
+    return gen[id];
+  }
+  persons.forEach(p=>getGen(p.id,new Set()));
+  return gen;
+}
+
+function renderTree(){
+  const grid=document.getElementById('treeGrid');
+  const emptyEl=document.getElementById('treeEmpty');
+  if(persons.length===0){
+    emptyEl.style.display='flex';
+    grid.innerHTML='';
+    return;
+  }
+  emptyEl.style.display='none';
+  const gen=computeGenerations();
+  const maxGen=Math.max(...Object.values(gen));
+  const byGen={};
+  for(let g=0;g<=maxGen;g++) byGen[g]=[];
+  persons.forEach(p=>byGen[gen[p.id]].push(p));
+
+  // order within generation: try to keep couples adjacent & group by parents
+  for(let g=0;g<=maxGen;g++){
+    const arr=byGen[g];
+    arr.sort((a,b)=>{
+      const pa=(a.parents&&a.parents[0])||'', pb=(b.parents&&b.parents[0])||'';
+      if(pa!==pb) return pa.localeCompare(pb);
+      return fullName(a).localeCompare(fullName(b));
+    });
+    const placed=new Set();
+    const ordered=[];
+    arr.forEach(p=>{
+      if(placed.has(p.id)) return;
+      ordered.push(p); placed.add(p.id);
+      (p.conjoints||[]).forEach(cid=>{
+        if(!placed.has(cid) && arr.find(x=>x.id===cid)){
+          ordered.push(byId(cid)); placed.add(cid);
+        }
+      });
+    });
+    byGen[g]=ordered;
+  }
+
+  let html='';
+  for(let g=0;g<=maxGen;g++){
+    html+=`<div class="gen-row" data-gen="${g}"><div class="gen-label">Génération ${g+1}</div>`;
+    const arr=byGen[g];
+    let i=0;
+    while(i<arr.length){
+      const p=arr[i];
+      const next=arr[i+1];
+      const isCouple = next && p.conjoints && p.conjoints.includes(next.id);
+      if(isCouple){
+        html+=`<div class="couple">${cardHtml(p)}<span class="heart">♥</span>${cardHtml(next)}</div>`;
+        i+=2;
+      }else{
+        html+=cardHtml(p);
+        i+=1;
+      }
+    }
+    html+='</div>';
+  }
+  grid.innerHTML = `<svg class="connectors" id="connSvg"></svg>` + html;
+  requestAnimationFrame(drawConnectors);
+}
+
+function cardHtml(p){
+  return `<div class="card sexe-${p.sexe}" data-id="${p.id}" onclick="openDetail('${p.id}')">
+    <div class="avatar">${p.photo?`<img src="${p.photo}">`:initials(p)}</div>
+    <div class="name">${escapeHtml(fullName(p))}</div>
+    <div class="dates">${dateRange(p)||'\u00A0'}</div>
+  </div>`;
+}
+
+function drawConnectors(){
+  const container=document.getElementById('treeGrid');
+  const svg=document.getElementById('connSvg');
+  if(!container||!svg) return;
+  const cRect=container.getBoundingClientRect();
+  svg.setAttribute('width',container.scrollWidth);
+  svg.setAttribute('height',container.scrollHeight);
+  svg.innerHTML='';
+  const cards={};
+  container.querySelectorAll('.card').forEach(el=>{cards[el.dataset.id]=el;});
+
+  function center(el){
+    const r=el.getBoundingClientRect();
+    return {
+      x:r.left-cRect.left+r.width/2,
+      top:r.top-cRect.top,
+      bottom:r.top-cRect.top+r.height,
+      y:r.top-cRect.top+r.height/2
+    };
+  }
+  // parent -> child branches
+  persons.forEach(p=>{
+    const childEl=cards[p.id];
+    if(!childEl || !p.parents || p.parents.length===0) return;
+    const parentEls=p.parents.map(pid=>cards[pid]).filter(Boolean);
+    if(parentEls.length===0) return;
+    let sumX=0,sumY=0;
+    parentEls.forEach(el=>{const c=center(el); sumX+=c.x; sumY+=c.bottom;});
+    const px=sumX/parentEls.length, py=sumY/parentEls.length;
+    const cc=center(childEl);
+    const midY=(py+cc.top)/2;
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M ${px} ${py} C ${px} ${midY}, ${cc.x} ${midY}, ${cc.x} ${cc.top}`);
+    path.setAttribute('class','branch');
+    svg.appendChild(path);
+  });
+  // couple union lines
+  const drawn=new Set();
+  persons.forEach(p=>{
+    (p.conjoints||[]).forEach(cid=>{
+      const key=[p.id,cid].sort().join('|');
+      if(drawn.has(key)) return; drawn.add(key);
+      const a=cards[p.id], b=cards[cid];
+      if(!a||!b) return;
+      const ca=center(a), cb=center(b);
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',ca.x);line.setAttribute('y1',ca.y);
+      line.setAttribute('x2',cb.x);line.setAttribute('y2',cb.y);
+      line.setAttribute('class','union');
+      svg.appendChild(line);
+    });
+  });
+}
+window.addEventListener('resize',()=>{ if(document.getElementById('view-arbre').classList.contains('active')) drawConnectors(); });
+
+/* =================== STATS =================== */
+function renderStats(){
+  document.getElementById('statCount').textContent=persons.length;
+  if(persons.length===0){document.getElementById('statGen').textContent='0';return;}
+  const gen=computeGenerations();
+  document.getElementById('statGen').textContent=(Math.max(...Object.values(gen))+1);
+}
+
+/* =================== DÉTAIL =================== */
+function openDetail(id){
+  currentDetailId=id;
+  const p=byId(id);
+  if(!p) return;
+  document.getElementById('detailAvatar').innerHTML = p.photo?`<img src="${p.photo}">`:initials(p);
+  document.getElementById('detailName').textContent=fullName(p);
+  let dates=dateRange(p);
+  if(p.lieu) dates += (dates?' · ':'')+p.lieu;
+  document.getElementById('detailDates').textContent=dates;
+  document.getElementById('detailNotes').textContent=p.notes||'';
+  document.getElementById('detailOverlay').classList.add('active');
+}
+function closeDetail(){
+  document.getElementById('detailOverlay').classList.remove('active');
+  currentDetailId=null;
+}
+function deleteCurrentPerson(){
+  if(!currentDetailId) return;
+  const p=byId(currentDetailId);
+  if(!confirm(`Supprimer ${fullName(p)} ? Les liens familiaux vers cette personne seront aussi retirés.`)) return;
+  const id=currentDetailId;
+  persons=persons.filter(x=>x.id!==id);
+  persons.forEach(x=>{
+    x.parents=(x.parents||[]).filter(pid=>pid!==id);
+    x.conjoints=(x.conjoints||[]).filter(cid=>cid!==id);
+  });
+  Promise.all(persons.map(x=>dbPut(x))).then(()=>dbDelete(id)).then(()=>{
+    closeDetail(); renderAll(); showToast('Personne supprimée');
+  });
+}
+function editCurrentPerson(){
+  const id=currentDetailId;
+  closeDetail();
+  openPersonForm(id);
+}
+function quickAdd(type){
+  pendingQuickAction={type,forId:currentDetailId};
+  closeDetail();
+  openPersonForm(null);
+}
+
+/* =================== FORMULAIRE =================== */
+function fillSelect(sel,excludeId,placeholder){
+  sel.innerHTML=`<option value="">${placeholder}</option>`+
+    persons.filter(p=>p.id!==excludeId).sort((a,b)=>fullName(a).localeCompare(fullName(b)))
+      .map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+}
+
+function openPersonForm(id=null){
+  editingId=id;
+  const form=document.getElementById('personForm');
+  form.reset();
+  document.getElementById('formAvatarPreview').innerHTML='＋';
+  document.getElementById('formAvatarPreview').dataset.photo='';
+  document.getElementById('conjointChips').innerHTML='';
+  document.getElementById('conjointChips').dataset.ids='[]';
+
+  const excludeId = id || (pendingQuickAction?pendingQuickAction.forId:null);
+  fillSelect(document.getElementById('formParent1'), id, 'Parent 1 (aucun)');
+  fillSelect(document.getElementById('formParent2'), id, 'Parent 2 (aucun)');
+  fillSelect(document.getElementById('formConjointAdd'), id, '+ Ajouter un conjoint');
+
+  if(id){
+    const p=byId(id);
+    document.getElementById('formTitle').textContent='Modifier '+fullName(p);
+    document.getElementById('formPrenom').value=p.prenom||'';
+    document.getElementById('formNom').value=p.nom||'';
+    document.getElementById('formSexe').value=p.sexe||'H';
+    document.getElementById('formNaissance').value=p.naissance||'';
+    document.getElementById('formDeces').value=p.deces||'';
+    document.getElementById('formLieu').value=p.lieu||'';
+    document.getElementById('formNotes').value=p.notes||'';
+    document.getElementById('formParent1').value=(p.parents&&p.parents[0])||'';
+    document.getElementById('formParent2').value=(p.parents&&p.parents[1])||'';
+    if(p.photo){
+      document.getElementById('formAvatarPreview').innerHTML=`<img src="${p.photo}">`;
+      document.getElementById('formAvatarPreview').dataset.photo=p.photo;
+    }
+    (p.conjoints||[]).forEach(cid=>addConjointChip(cid));
+  } else {
+    document.getElementById('formTitle').textContent='Ajouter une personne';
+    document.getElementById('formSexe').value='H';
+    // pré-remplissage selon action rapide
+    if(pendingQuickAction){
+      const ref=byId(pendingQuickAction.forId);
+      if(pendingQuickAction.type==='enfant' && ref){
+        document.getElementById('formParent1').value=ref.id;
+        if(ref.conjoints && ref.conjoints[0]) document.getElementById('formParent2').value=ref.conjoints[0];
+      }
+      if(pendingQuickAction.type==='conjoint' && ref){
+        addConjointChip(ref.id);
+      }
+      // pour 'parent', le lien sera créé après sauvegarde (étape suivante)
+    }
+  }
+  document.getElementById('formOverlay').classList.add('active');
+}
+function closeForm(){
+  document.getElementById('formOverlay').classList.remove('active');
+  editingId=null;
+  pendingQuickAction=null;
+}
+
+function onPhotoChange(input){
+  const file=input.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const max=240;
+      let {width,height}=img;
+      if(width>height && width>max){height*=max/width;width=max;}
+      else if(height>=width && height>max){width*=max/height;height=max;}
+      const canvas=document.createElement('canvas');
+      canvas.width=width;canvas.height=height;
+      canvas.getContext('2d').drawImage(img,0,0,width,height);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.75);
+      document.getElementById('formAvatarPreview').innerHTML=`<img src="${dataUrl}">`;
+      document.getElementById('formAvatarPreview').dataset.photo=dataUrl;
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function addConjointChip(id){
+  if(!id) return;
+  const chips=document.getElementById('conjointChips');
+  let ids=JSON.parse(chips.dataset.ids||'[]');
+  if(ids.includes(id)) return;
+  ids.push(id);
+  chips.dataset.ids=JSON.stringify(ids);
+  renderConjointChips();
+}
+function removeConjointChip(id){
+  const chips=document.getElementById('conjointChips');
+  let ids=JSON.parse(chips.dataset.ids||'[]');
+  ids=ids.filter(x=>x!==id);
+  chips.dataset.ids=JSON.stringify(ids);
+  renderConjointChips();
+}
+function renderConjointChips(){
+  const chips=document.getElementById('conjointChips');
+  const ids=JSON.parse(chips.dataset.ids||'[]');
+  chips.innerHTML=ids.map(id=>{
+    const p=byId(id);
+    const name=p?fullName(p):'(nouveau)';
+    return `<span class="chip">${escapeHtml(name)} <button type="button" onclick="removeConjointChip('${id}')">×</button></span>`;
+  }).join('');
+}
+
+async function savePerson(e){
+  e.preventDefault();
+  const id=editingId||uid();
+  const conjointIds=JSON.parse(document.getElementById('conjointChips').dataset.ids||'[]');
+  const parents=[document.getElementById('formParent1').value,document.getElementById('formParent2').value].filter(Boolean);
+
+  const data={
+    id,
+    prenom:document.getElementById('formPrenom').value.trim(),
+    nom:document.getElementById('formNom').value.trim(),
+    sexe:document.getElementById('formSexe').value,
+    naissance:document.getElementById('formNaissance').value,
+    deces:document.getElementById('formDeces').value,
+    lieu:document.getElementById('formLieu').value.trim(),
+    notes:document.getElementById('formNotes').value.trim(),
+    photo:document.getElementById('formAvatarPreview').dataset.photo||'',
+    parents,
+    conjoints: editingId ? (byId(editingId).conjoints||[]).slice() : []
+  };
+
+  // gérer les conjoints (relation bidirectionnelle)
+  const previousConjoints = editingId ? (byId(editingId).conjoints||[]).slice() : [];
+  data.conjoints = conjointIds.slice();
+
+  if(!editingId){
+    persons.push(data);
+  } else {
+    const idx=persons.findIndex(p=>p.id===id);
+    persons[idx]=data;
+  }
+
+  // retirer ce lien chez les anciens conjoints qui ne sont plus sélectionnés
+  previousConjoints.filter(c=>!conjointIds.includes(c)).forEach(cid=>{
+    const c=byId(cid);
+    if(c) c.conjoints=(c.conjoints||[]).filter(x=>x!==id);
+  });
+  // ajouter le lien chez les nouveaux conjoints
+  conjointIds.forEach(cid=>{
+    const c=byId(cid);
+    if(c && !(c.conjoints||[]).includes(id)){
+      c.conjoints=c.conjoints||[];
+      c.conjoints.push(id);
+    }
+  });
+
+  // action rapide : lien "ajouter un parent" / "ajouter un enfant" depuis le détail
+  if(!editingId && pendingQuickAction){
+    const ref=byId(pendingQuickAction.forId);
+    if(ref){
+      if(pendingQuickAction.type==='parent'){
+        ref.parents=ref.parents||[];
+        if(ref.parents.length<2 && !ref.parents.includes(id)) ref.parents.push(id);
+      }
+      if(pendingQuickAction.type==='enfant'){
+        // déjà géré via parents pré-remplis dans le formulaire
+      }
+    }
+  }
+
+  // sauvegarder toutes les personnes modifiées
+  const toSave=new Set([id]);
+  previousConjoints.forEach(c=>toSave.add(c));
+  conjointIds.forEach(c=>toSave.add(c));
+  if(pendingQuickAction) toSave.add(pendingQuickAction.forId);
+  for(const pid of toSave){
+    const pp=byId(pid);
+    if(pp) await dbPut(pp);
+  }
+
+  closeForm();
+  renderAll();
+  showToast('Enregistré ✓');
+}
+
+/* =================== EXPORT / IMPORT =================== */
+async function exportData(){
+  const payload={app:'arbre-genealogique',version:1,exportedAt:new Date().toISOString(),persons};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const file=new File([blob],`arbre-genealogique-${dateStamp()}.json`,{type:'application/json'});
+
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file],title:'Sauvegarde Arbre Généalogique'});
+      return;
+    }catch(e){ /* annulé ou non supporté -> fallback */ }
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Fichier exporté');
+}
+function dateStamp(){
+  const d=new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function importData(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      const list=Array.isArray(data)?data:data.persons;
+      if(!Array.isArray(list)) throw new Error('format invalide');
+      if(!confirm(`Importer ${list.length} personne(s) ? Cela remplacera toutes les données actuelles.`)) return;
+      await dbBulkReplace(list);
+      persons=list;
+      renderAll();
+      switchView('personnes');
+      showToast('Importation réussie ✓');
+    }catch(err){
+      alert('Fichier invalide : '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  document.getElementById('importFile').value='';
+}
+
+async function resetAll(){
+  if(!confirm("Supprimer toutes les personnes de l'arbre ? Cette action est irréversible.")) return;
+  await dbClear();
+  persons=[];
+  renderAll();
+  showToast('Données effacées');
+}
+
+/* =================== TOAST =================== */
+let toastTimer=null;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2000);
+}
+</script>
+</body>
+</html>
