@@ -190,6 +190,8 @@
     font-family:Georgia,serif;
   }
   .avatar img{width:100%;height:100%;object-fit:cover;}
+  .avatar svg{width:55%;height:55%;fill:var(--primary);opacity:.55;}
+  .avatar .avatar-gen{font-size:.85em;font-weight:700;letter-spacing:.02em;}
   .person-row .info{flex:1;min-width:0;}
   .person-row .name{font-weight:700;font-size:15px;}
   .person-row .meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
@@ -673,9 +675,26 @@ let pendingQuickAction=null; // {type:'parent'|'conjoint'|'enfant', forId}
 function uid(){return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);}
 function byId(id){return persons.find(p=>p.id===id);}
 function fullName(p){return [p.prenom,p.nom].filter(Boolean).join(' ');}
-function initials(p){
-  const a=(p.prenom||'')[0]||'', b=(p.nom||'')[0]||'';
-  return (a+b).toUpperCase()||'?';
+
+const PERSON_ICON='<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+
+let nameCounts={};
+function updateNameCounts(){
+  nameCounts={};
+  persons.forEach(p=>{
+    const n=fullName(p).trim().toLowerCase();
+    nameCounts[n]=(nameCounts[n]||0)+1;
+  });
+}
+// Contenu de l'avatar : photo, sinon génération si homonyme, sinon icône générique
+function avatarHtml(p,gen){
+  if(p.photo) return `<img src="${p.photo}">`;
+  const n=fullName(p).trim().toLowerCase();
+  if((nameCounts[n]||0)>1){
+    const g=gen?gen[p.id]:computeGenerations()[p.id];
+    return `<span class="avatar-gen">G${(g||0)+1}</span>`;
+  }
+  return PERSON_ICON;
 }
 function yearOf(d){return d?d.slice(0,4):'';}
 function dateRange(p){
@@ -697,6 +716,7 @@ async function init(){
 init();
 
 function renderAll(){
+  updateNameCounts();
   renderPersonsList();
   populateTreeFilters();
   renderTree();
@@ -732,7 +752,7 @@ function renderPersonsList(){
   const gen=computeGenerations();
   list.innerHTML=filtered.map(p=>`
     <div class="person-row sexe-${p.sexe}" onclick="openDetail('${p.id}')">
-      <div class="avatar">${p.photo?`<img src="${p.photo}">`:initials(p)}</div>
+      <div class="avatar">${avatarHtml(p,gen)}</div>
       <div class="info">
         <div class="name">${escapeHtml(fullName(p))}</div>
         <div class="meta">${personSubtitle(p)}</div>
@@ -944,10 +964,10 @@ function renderTree(){
       const next=arr[i+1];
       const isCouple = next && p.conjoints && p.conjoints.includes(next.id);
       if(isCouple){
-        html+=`<div class="couple">${cardHtml(p,focusId)}<span class="heart">♥</span>${cardHtml(next,focusId)}</div>`;
+        html+=`<div class="couple">${cardHtml(p,focusId,gen)}<span class="heart">♥</span>${cardHtml(next,focusId,gen)}</div>`;
         i+=2;
       }else{
-        html+=cardHtml(p,focusId);
+        html+=cardHtml(p,focusId,gen);
         i+=1;
       }
     }
@@ -958,12 +978,11 @@ function renderTree(){
   requestAnimationFrame(drawConnectors);
 }
 
-function cardHtml(p,focusId){
+function cardHtml(p,focusId,gen){
   const cls = (focusId && p.id===focusId) ? ' focus-root' : '';
   return `<div class="card sexe-${p.sexe}${cls}" data-id="${p.id}" onclick="openDetail('${p.id}')">
-    <div class="avatar">${p.photo?`<img src="${p.photo}">`:initials(p)}</div>
+    <div class="avatar">${avatarHtml(p,gen)}</div>
     <div class="name">${escapeHtml(fullName(p))}</div>
-    <div class="dates">${dateRange(p)||'\u00A0'}</div>
   </div>`;
 }
 
@@ -1022,6 +1041,23 @@ function drawConnectors(){
 }
 window.addEventListener('resize',()=>{ if(document.getElementById('view-arbre').classList.contains('active')) drawConnectors(); });
 
+// Liaisons adaptatives : redessiner dès que la taille de l'arbre ou de la fenêtre change
+if(typeof ResizeObserver!=='undefined'){
+  let roTimer=null;
+  const treeResizeObserver=new ResizeObserver(()=>{
+    if(!document.getElementById('view-arbre').classList.contains('active')) return;
+    clearTimeout(roTimer);
+    roTimer=setTimeout(drawConnectors,80);
+  });
+  window.addEventListener('load',()=>{
+    treeResizeObserver.observe(document.getElementById('treeScroll'));
+    treeResizeObserver.observe(document.getElementById('treeGrid'));
+  });
+}
+window.addEventListener('orientationchange',()=>{
+  setTimeout(()=>{ if(document.getElementById('view-arbre').classList.contains('active')) drawConnectors(); },200);
+});
+
 /* =================== STATS =================== */
 function renderStats(){
   document.getElementById('statCount').textContent=persons.length;
@@ -1035,7 +1071,7 @@ function openDetail(id){
   currentDetailId=id;
   const p=byId(id);
   if(!p) return;
-  document.getElementById('detailAvatar').innerHTML = p.photo?`<img src="${p.photo}">`:initials(p);
+  document.getElementById('detailAvatar').innerHTML = avatarHtml(p);
   document.getElementById('detailName').textContent=fullName(p);
   let dates=dateRange(p);
   if(p.lieu) dates += (dates?' · ':'')+p.lieu;
