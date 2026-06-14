@@ -785,18 +785,41 @@ let treeZoom=1; // 0=compact, 1=normal, 2=grand
 
 function computeGenerations(){
   const gen={};
-  function getGen(id,visited){
-    if(gen[id]!==undefined) return gen[id];
-    if(visited.has(id)) return gen[id]=0;
-    visited.add(id);
-    const p=byId(id);
-    if(!p || !p.parents || p.parents.length===0){gen[id]=0;return 0;}
-    let max=-1;
-    p.parents.forEach(pid=>{ if(byId(pid)) max=Math.max(max,getGen(pid,visited)); });
-    gen[id]=max+1;
-    return gen[id];
+  persons.forEach(p=>gen[p.id]=0);
+
+  // 1) Remonte la génération d'un enfant si elle est inférieure à celle de ses parents + 1
+  function recomputeFromParents(){
+    let changed=false;
+    persons.forEach(p=>{
+      if(p.parents && p.parents.length){
+        let max=-1;
+        p.parents.forEach(pid=>{ if(byId(pid)) max=Math.max(max,gen[pid]); });
+        if(max>=0 && gen[p.id]<max+1){ gen[p.id]=max+1; changed=true; }
+      }
+    });
+    return changed;
   }
-  persons.forEach(p=>getGen(p.id,new Set()));
+
+  // 2) Aligne une personne sans parents connus sur la génération de son/ses conjoint(s)
+  //    (sinon elle resterait toujours en génération 1, désaligné des liaisons)
+  function alignRootsToSpouses(){
+    let changed=false;
+    persons.forEach(p=>{
+      if(!p.parents || p.parents.length===0){
+        (p.conjoints||[]).forEach(cid=>{
+          if(byId(cid) && gen[cid]>gen[p.id]){ gen[p.id]=gen[cid]; changed=true; }
+        });
+      }
+    });
+    return changed;
+  }
+
+  // Itère jusqu'à stabilisation (bornée par le nombre de personnes)
+  for(let i=0;i<persons.length+2;i++){
+    const c1=recomputeFromParents();
+    const c2=alignRootsToSpouses();
+    if(!c1 && !c2) break;
+  }
   return gen;
 }
 
