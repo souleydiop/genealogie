@@ -477,6 +477,14 @@
         </div>
 
         <div class="data-card">
+          <h3>🌐 GEDCOM</h3>
+          <p>Format standard utilisé par les logiciels de généalogie (Gramps, FamilySearch, Geneanet, Ancestry…). Pratique pour échanger vos données avec ces outils.</p>
+          <button class="btn block secondary" onclick="exportGedcom()" style="margin-bottom:10px;">Exporter en .GED</button>
+          <input type="file" id="importGedFile" accept=".ged,text/plain" style="display:none;" onchange="importGedcom(this.files[0])">
+          <button class="btn block outline" onclick="document.getElementById('importGedFile').click()">Importer un fichier .GED</button>
+        </div>
+
+        <div class="data-card">
           <h3>🗑️ Réinitialiser</h3>
           <p>Supprime définitivement toutes les personnes de l'application. Pensez à exporter avant si besoin.</p>
           <button class="btn block danger" onclick="resetAll()">Tout effacer</button>
@@ -903,6 +911,71 @@ function zoomTree(delta){
   requestAnimationFrame(drawConnectors);
 }
 
+// Construit, pour chaque génération, une liste de "blocs" (une personne seule
+// ou un groupe de conjoints) puis affine leur ordre par passes de barycentre
+// (algorithme type Sugiyama) pour limiter les croisements de branches entre
+// générations adjacentes — utile dès que le graphe a plusieurs ascendants/
+// descendants (DAG) ou des couples répartis sur la largeur.
+function buildLayoutLayers(byGen, maxGen){
+  const layers=[];
+  for(let g=0;g<=maxGen;g++){
+    const arr=[...byGen[g]];
+    arr.sort((a,b)=>{
+      const pa=(a.parents&&a.parents[0])||'', pb=(b.parents&&b.parents[0])||'';
+      if(pa!==pb) return pa.localeCompare(pb);
+      return fullName(a).localeCompare(fullName(b));
+    });
+    const idsInLayer=new Set(arr.map(p=>p.id));
+    const placed=new Set();
+    const blocks=[];
+    arr.forEach(p=>{
+      if(placed.has(p.id)) return;
+      const block=[p.id]; placed.add(p.id);
+      (p.conjoints||[]).forEach(cid=>{
+        if(idsInLayer.has(cid) && !placed.has(cid)){ block.push(cid); placed.add(cid); }
+      });
+      blocks.push(block);
+    });
+    layers.push(blocks);
+  }
+
+  const shownIds=new Set();
+  layers.forEach(l=>l.forEach(b=>b.forEach(id=>shownIds.add(id))));
+
+  function childrenOf(id){
+    return persons.filter(x=>shownIds.has(x.id) && (x.parents||[]).includes(id)).map(x=>x.id);
+  }
+  function posMap(layer){
+    const m={};
+    layer.forEach((block,idx)=>block.forEach(id=>m[id]=idx));
+    return m;
+  }
+  function pass(g, refLayer, useParents){
+    const refPos=posMap(refLayer);
+    const withBary=layers[g].map((block,idx)=>{
+      let sum=0,count=0;
+      block.forEach(id=>{
+        const p=byId(id);
+        const neighbors = useParents ? (p.parents||[]).filter(nid=>shownIds.has(nid)) : childrenOf(id);
+        neighbors.forEach(nid=>{ if(refPos[nid]!==undefined){ sum+=refPos[nid]; count++; } });
+      });
+      return {block, bary: count?sum/count:idx};
+    });
+    withBary.sort((a,b)=>a.bary-b.bary);
+    layers[g]=withBary.map(x=>x.block);
+  }
+
+  const passes=4;
+  for(let it=0;it<passes;it++){
+    if(it%2===0){
+      for(let g=1;g<=maxGen;g++) if(layers[g-1]) pass(g, layers[g-1], true);
+    }else{
+      for(let g=maxGen-1;g>=0;g--) if(layers[g+1]) pass(g, layers[g+1], false);
+    }
+  }
+  return layers;
+}
+
 function renderTree(){
   const grid=document.getElementById('treeGrid');
   const emptyEl=document.getElementById('treeEmpty');
@@ -954,46 +1027,26 @@ function renderTree(){
   emptyEl.style.display='none';
   filteredEl.style.display='none';
 
-  // order within generation: try to keep couples adjacent & group by parents
-  for(let g=0;g<=maxGen;g++){
-    const arr=byGen[g];
-    arr.sort((a,b)=>{
-      const pa=(a.parents&&a.parents[0])||'', pb=(b.parents&&b.parents[0])||'';
-      if(pa!==pb) return pa.localeCompare(pb);
-      return fullName(a).localeCompare(fullName(b));
-    });
-    const placed=new Set();
-    const ordered=[];
-    arr.forEach(p=>{
-      if(placed.has(p.id)) return;
-      ordered.push(p); placed.add(p.id);
-      (p.conjoints||[]).forEach(cid=>{
-        if(!placed.has(cid) && arr.find(x=>x.id===cid)){
-          ordered.push(byId(cid)); placed.add(cid);
-        }
-      });
-    });
-    byGen[g]=ordered;
-  }
+  // Layout en couches (type Sugiyama) : ordonne les blocs (personne ou couple)
+  // de chaque génération pour minimiser les croisements de branches
+  const layers=buildLayoutLayers(byGen, maxGen);
 
   let html='';
   for(let g=0;g<=maxGen;g++){
-    if(byGen[g].length===0) continue;
+    if(layers[g].length===0) continue;
     html+=`<div class="gen-row" data-gen="${g}"><div class="gen-label">Génération ${g+1}</div>`;
-    const arr=byGen[g];
-    let i=0;
-    while(i<arr.length){
-      const p=arr[i];
-      const next=arr[i+1];
-      const isCouple = next && p.conjoints && p.conjoints.includes(next.id);
-      if(isCouple){
-        html+=`<div class="couple">${cardHtml(p,focusId,gen)}<span class="heart">♥</span>${cardHtml(next,focusId,gen)}</div>`;
-        i+=2;
+    layers[g].forEach(block=>{
+      if(block.length>=2){
+        html+='<div class="couple">';
+        block.forEach((id,idx)=>{
+          html+=cardHtml(byId(id),focusId,gen);
+          if(idx<block.length-1) html+='<span class="heart">♥</span>';
+        });
+        html+='</div>';
       }else{
-        html+=cardHtml(p,focusId,gen);
-        i+=1;
+        html+=cardHtml(byId(block[0]),focusId,gen);
       }
-    }
+    });
     html+='</div>';
   }
   grid.className='tree-grid zoom-'+treeZoom;
@@ -1325,22 +1378,25 @@ async function savePerson(e){
 }
 
 /* =================== EXPORT / IMPORT =================== */
-async function exportData(){
-  const payload={app:'arbre-genealogique',version:1,exportedAt:new Date().toISOString(),persons};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  const file=new File([blob],`arbre-genealogique-${dateStamp()}.json`,{type:'application/json'});
-
+async function shareOrDownload(blob, filename, title){
+  const file=new File([blob],filename,{type:blob.type});
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
-      await navigator.share({files:[file],title:'Sauvegarde Arbre Généalogique'});
+      await navigator.share({files:[file],title});
       return;
     }catch(e){ /* annulé ou non supporté -> fallback */ }
   }
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url; a.download=file.name;
+  a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
+}
+
+async function exportData(){
+  const payload={app:'arbre-genealogique',version:1,exportedAt:new Date().toISOString(),persons};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  await shareOrDownload(blob,`arbre-genealogique-${dateStamp()}.json`,'Sauvegarde Arbre Généalogique');
   showToast('Fichier exporté');
 }
 function dateStamp(){
@@ -1369,6 +1425,210 @@ function importData(file){
   reader.readAsText(file);
   document.getElementById('importFile').value='';
 }
+
+/* ---- GEDCOM ---- */
+const GED_MONTHS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+function isoToGedDate(iso){
+  if(!iso) return '';
+  const parts=iso.split('-').map(Number);
+  const [y,m,d]=parts;
+  if(!y) return '';
+  if(!m) return String(y);
+  if(!d) return `${GED_MONTHS[m-1]} ${y}`;
+  return `${d} ${GED_MONTHS[m-1]} ${y}`;
+}
+function gedDateToIso(s){
+  if(!s) return '';
+  s=s.replace(/^(ABT|EST|CAL|BEF|AFT)\.?\s+/i,'').trim();
+  const months={JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
+  let m=s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+  if(m && months[m[2].toUpperCase()]) return `${m[3]}-${months[m[2].toUpperCase()]}-${m[1].padStart(2,'0')}`;
+  m=s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
+  if(m && months[m[1].toUpperCase()]) return `${m[2]}-${months[m[1].toUpperCase()]}-01`;
+  m=s.match(/^(\d{4})$/);
+  if(m) return `${m[1]}-01-01`;
+  return '';
+}
+
+async function exportGedcom(){
+  const lines=[];
+  lines.push('0 HEAD');
+  lines.push('1 SOUR ArbreGenealogique');
+  lines.push('1 GEDC');
+  lines.push('2 VERS 5.5.1');
+  lines.push('2 FORM LINEAGE-LINKED');
+  lines.push('1 CHAR UTF-8');
+
+  const gedId={};
+  persons.forEach((p,i)=>gedId[p.id]='I'+(i+1));
+
+  // Regroupe les personnes par "famille" : couple (+ enfants) ou parent(s)+enfants
+  const famKey=(a,b)=>[a,b].filter(Boolean).sort().join('|');
+  const famMap=new Map(); // key -> {parents:[id,id?], children:[id,...]}
+  persons.forEach(p=>{
+    if(p.parents && p.parents.length){
+      const key=famKey(p.parents[0],p.parents[1]);
+      if(!famMap.has(key)) famMap.set(key,{parents:[...p.parents],children:[]});
+      famMap.get(key).children.push(p.id);
+    }
+  });
+  const seenPairs=new Set();
+  persons.forEach(p=>{
+    (p.conjoints||[]).forEach(cid=>{
+      const key=famKey(p.id,cid);
+      if(seenPairs.has(key)) return; seenPairs.add(key);
+      if(!famMap.has(key)) famMap.set(key,{parents:[p.id,cid],children:[]});
+    });
+  });
+  const famId={};
+  let fi=0;
+  famMap.forEach((fam,key)=>{ fi++; famId[key]='F'+fi; });
+
+  persons.forEach(p=>{
+    lines.push(`0 @${gedId[p.id]}@ INDI`);
+    lines.push(`1 NAME ${p.prenom||''} /${p.nom||''}/`);
+    lines.push(`1 SEX ${p.sexe==='F'?'F':p.sexe==='H'?'M':'U'}`);
+    if(p.naissance||p.lieu){
+      lines.push('1 BIRT');
+      if(p.naissance) lines.push(`2 DATE ${isoToGedDate(p.naissance)}`);
+      if(p.lieu) lines.push(`2 PLAC ${p.lieu}`);
+    }
+    if(p.deces){
+      lines.push('1 DEAT');
+      lines.push(`2 DATE ${isoToGedDate(p.deces)}`);
+    }
+    if(p.notes) lines.push(`1 NOTE ${p.notes.replace(/\r?\n/g,' ')}`);
+    if(p.parents && p.parents.length){
+      const fid=famId[famKey(p.parents[0],p.parents[1])];
+      if(fid) lines.push(`1 FAMC @${fid}@`);
+    }
+    famMap.forEach((fam,key)=>{
+      if(fam.parents.includes(p.id)) lines.push(`1 FAMS @${famId[key]}@`);
+    });
+  });
+
+  famMap.forEach((fam,key)=>{
+    lines.push(`0 @${famId[key]}@ FAM`);
+    fam.parents.forEach(pid=>{
+      const person=byId(pid);
+      if(!person) return;
+      lines.push(`1 ${person.sexe==='F'?'WIFE':'HUSB'} @${gedId[pid]}@`);
+    });
+    fam.children.forEach(cid=>{
+      if(byId(cid)) lines.push(`1 CHIL @${gedId[cid]}@`);
+    });
+  });
+  lines.push('0 TRLR');
+
+  const blob=new Blob([lines.join('\r\n')],{type:'text/plain'});
+  await shareOrDownload(blob,`arbre-genealogique-${dateStamp()}.ged`,'Export GEDCOM');
+  showToast('Fichier GEDCOM exporté');
+}
+
+function parseGedcomLines(text){
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const records=[];
+  let stack=[];
+  lines.forEach(raw=>{
+    const m=raw.match(/^(\d+)\s+(@[^@]+@\s+)?(\S+)(?:\s+(.*))?$/);
+    if(!m) return;
+    const level=parseInt(m[1],10);
+    const xref=m[2]?m[2].trim().replace(/@/g,''):null;
+    const node={level,tag:m[3],value:m[4]||'',xref,children:[]};
+    if(level===0){
+      records.push(node);
+      stack=[node];
+    }else{
+      while(stack.length>level) stack.pop();
+      const parent=stack[stack.length-1];
+      if(parent) parent.children.push(node);
+      stack.push(node);
+    }
+  });
+  return records;
+}
+
+function gedcomToPersons(records){
+  const indi=records.filter(r=>r.tag==='INDI');
+  const fam=records.filter(r=>r.tag==='FAM');
+  const idMap={};
+  indi.forEach(r=>{ idMap[r.xref]=uid(); });
+
+  const list=indi.map(r=>{
+    const p={id:idMap[r.xref],prenom:'',nom:'',sexe:'A',naissance:'',deces:'',lieu:'',photo:'',notes:'',parents:[],conjoints:[]};
+    r.children.forEach(c=>{
+      if(c.tag==='NAME'){
+        const m=c.value.match(/^([^\/]*)\/([^\/]*)\/?/);
+        if(m){ p.prenom=m[1].trim(); p.nom=m[2].trim(); }
+        else p.prenom=c.value.trim();
+      }else if(c.tag==='SEX'){
+        p.sexe = c.value==='M'?'H':c.value==='F'?'F':'A';
+      }else if(c.tag==='BIRT'){
+        c.children.forEach(cc=>{
+          if(cc.tag==='DATE') p.naissance=gedDateToIso(cc.value);
+          if(cc.tag==='PLAC') p.lieu=cc.value;
+        });
+      }else if(c.tag==='DEAT'){
+        c.children.forEach(cc=>{ if(cc.tag==='DATE') p.deces=gedDateToIso(cc.value); });
+      }else if(c.tag==='NOTE'){
+        p.notes=(p.notes?p.notes+' ':'')+c.value;
+      }
+    });
+    return p;
+  });
+  const byUid=id=>list.find(x=>x.id===id);
+
+  fam.forEach(r=>{
+    const husbs=[], wifes=[], chil=[];
+    r.children.forEach(c=>{
+      const ref=(c.value||'').replace(/@/g,'');
+      if(c.tag==='HUSB') husbs.push(idMap[ref]);
+      else if(c.tag==='WIFE') wifes.push(idMap[ref]);
+      else if(c.tag==='CHIL') chil.push(idMap[ref]);
+    });
+    const allParents=[...husbs,...wifes].filter(Boolean);
+    if(allParents.length===2){
+      const [pa,pb]=allParents;
+      const a=byUid(pa), b=byUid(pb);
+      if(a && b){
+        if(!a.conjoints.includes(pb)) a.conjoints.push(pb);
+        if(!b.conjoints.includes(pa)) b.conjoints.push(pa);
+      }
+    }
+    chil.forEach(cid=>{
+      const pc=byUid(cid);
+      if(!pc) return;
+      allParents.forEach(pid=>{
+        if(!pc.parents.includes(pid) && pc.parents.length<2) pc.parents.push(pid);
+      });
+    });
+  });
+  return list;
+}
+
+function importGedcom(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const records=parseGedcomLines(e.target.result);
+      const list=gedcomToPersons(records);
+      if(list.length===0) throw new Error('aucune personne trouvée');
+      if(!confirm(`Importer ${list.length} personne(s) depuis ce fichier GEDCOM ? Cela remplacera toutes les données actuelles.`)) return;
+      await dbBulkReplace(list);
+      persons=list;
+      renderAll();
+      switchView('personnes');
+      showToast('Importation GEDCOM réussie ✓');
+    }catch(err){
+      alert('Fichier GEDCOM invalide : '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  document.getElementById('importGedFile').value='';
+}
+
 
 async function resetAll(){
   if(!confirm("Supprimer toutes les personnes de l'arbre ? Cette action est irréversible.")) return;
