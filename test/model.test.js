@@ -81,6 +81,26 @@ test('computeGenerations() aligne un conjoint sans parents connus sur la génér
   assert.equal(gen[conjoint.id], gen[parent.id]);
 });
 
+test('computeGenerations() respecte genManuel comme point de départ et le propage aux enfants/conjoint', () => {
+  const isole = person({ prenom: 'Isolé', genManuel: 3 });
+  const conjoint = person({ prenom: 'Conjoint' });
+  isole.conjoints = [conjoint.id];
+  conjoint.conjoints = [isole.id];
+  const enfant = person({ prenom: 'Enfant', parents: [isole.id] });
+  _setPersons([isole, conjoint, enfant]);
+
+  const gen = computeGenerations();
+  assert.equal(gen[isole.id], 3);
+  assert.equal(gen[conjoint.id], 3);
+  assert.equal(gen[enfant.id], 4);
+});
+
+test('computeGenerations() ignore genManuel absent (comportement automatique inchangé)', () => {
+  const p = person({ prenom: 'Normal' });
+  _setPersons([p]);
+  assert.equal(computeGenerations()[p.id], 0);
+});
+
 test('getFocusedSet() inclut ancêtres, descendants et conjoints', () => {
   const gp = person({ prenom: 'GrandParent' });
   const parent = person({ prenom: 'Parent', parents: [gp.id] });
