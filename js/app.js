@@ -393,6 +393,7 @@ function openPersonForm(id=null){
     document.getElementById('formNaissance').value=p.naissance||'';
     document.getElementById('formDeces').value=p.deces||'';
     document.getElementById('formLieu').value=p.lieu||'';
+    document.getElementById('formGenManuel').value=(typeof p.genManuel==='number')?(p.genManuel+1):'';
     document.getElementById('formNotes').value=p.notes||'';
     document.getElementById('formParent1').value=(p.parents&&p.parents[0])||'';
     document.getElementById('formParent2').value=(p.parents&&p.parents[1])||'';
@@ -488,6 +489,7 @@ async function savePerson(e){
     naissance:document.getElementById('formNaissance').value,
     deces:document.getElementById('formDeces').value,
     lieu:document.getElementById('formLieu').value.trim(),
+    genManuel:(()=>{ const v=document.getElementById('formGenManuel').value; return v===''?null:(parseInt(v,10)-1); })(),
     notes:document.getElementById('formNotes').value.trim(),
     photo:document.getElementById('formAvatarPreview').dataset.photo||'',
     parents,
@@ -629,6 +631,30 @@ function importGedcom(file){
   document.getElementById('importGedFile').value='';
 }
 
+
+function exportPdf(){
+  const gen=computeGenerations();
+  const byGen={};
+  persons.forEach(p=>{ (byGen[gen[p.id]]=byGen[gen[p.id]]||[]).push(p); });
+  const gens=Object.keys(byGen).map(Number).sort((a,b)=>a-b);
+
+  let html=`<h1>Arbre Généalogique</h1><p class="print-date">Généré le ${new Date().toLocaleDateString('fr-FR')} — ${persons.length} personne(s)</p>`;
+  gens.forEach(g=>{
+    html+=`<h2>Génération ${g+1}</h2><table><thead><tr><th>Nom</th><th>Dates</th><th>Lieu</th><th>Filiation</th></tr></thead><tbody>`;
+    byGen[g].slice().sort((a,b)=>fullName(a).localeCompare(fullName(b),'fr')).forEach(p=>{
+      const parentsNames=(p.parents||[]).map(pid=>{ const pp=byId(pid); return pp?fullName(pp):''; }).filter(Boolean).join(' & ');
+      const conjointsNames=(p.conjoints||[]).map(cid=>{ const c=byId(cid); return c?fullName(c):''; }).filter(Boolean).join(', ');
+      let filiation='';
+      if(parentsNames) filiation+='Enfant de '+parentsNames+'. ';
+      if(conjointsNames) filiation+='Conjoint(e) de '+conjointsNames+'.';
+      html+=`<tr><td>${escapeHtml(fullName(p))}</td><td>${escapeHtml(dateRange(p))}</td><td>${escapeHtml(p.lieu||'')}</td><td>${escapeHtml(filiation)}</td></tr>`;
+    });
+    html+=`</tbody></table>`;
+  });
+
+  document.getElementById('printArea').innerHTML=html;
+  window.print();
+}
 
 async function resetAll(){
   if(!confirm("Supprimer toutes les personnes de l'arbre ? Cette action est irréversible.")) return;
