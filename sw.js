@@ -1,8 +1,12 @@
-const CACHE_NAME = 'genealogie-cache-v1';
+const CACHE_NAME = 'genealogie-cache-v2';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './js/db.js',
+  './js/model.js',
+  './js/gedcom.js',
+  './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-512-maskable.png'
