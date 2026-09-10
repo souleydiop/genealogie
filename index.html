@@ -190,7 +190,7 @@
     font-family:Georgia,serif;
   }
   .avatar img{width:100%;height:100%;object-fit:cover;}
-  .avatar svg{width:55%;height:55%;fill:var(--primary);opacity:.55;}
+  .avatar svg{width:38%;height:38%;fill:var(--primary);opacity:.55;}
   .avatar .avatar-gen{font-size:.85em;font-weight:700;letter-spacing:.02em;}
   .person-row .info{flex:1;min-width:0;}
   .person-row .name{font-weight:700;font-size:15px;}
@@ -303,6 +303,19 @@
   .tree-grid.zoom-2 .card .dates{font-size:12px;}
 
   .card.focus-root{box-shadow:0 0 0 3px var(--accent);}
+
+  /* ---- Export PDF (impression) ---- */
+  #printArea{display:none;}
+  #printArea h1{font-size:20px;margin:0 0 4px;}
+  #printArea .print-date{color:var(--ink-soft);font-size:12px;margin:0 0 20px;}
+  #printArea h2{font-size:15px;margin:22px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px;}
+  #printArea table{width:100%;border-collapse:collapse;font-size:12px;}
+  #printArea th,#printArea td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
+  #printArea th{color:var(--ink-soft);font-weight:600;}
+  @media print{
+    body>*:not(#printArea){display:none!important;}
+    #printArea{display:block!important;}
+  }
 
   /* ---- Données ---- */
   .data-wrap{padding:18px 16px;}
@@ -477,6 +490,12 @@
         </div>
 
         <div class="data-card">
+          <h3>🖨️ Export PDF</h3>
+          <p>Génère une liste imprimable de toutes les personnes, groupées par génération. S'ouvre dans la boîte de dialogue d'impression : choisissez "Enregistrer en PDF" comme destination.</p>
+          <button class="btn block secondary" onclick="exportPdf()">Générer un PDF</button>
+        </div>
+
+        <div class="data-card">
           <h3>🌐 GEDCOM</h3>
           <p>Format standard utilisé par les logiciels de généalogie (Gramps, FamilySearch, Geneanet, Ancestry…). Pratique pour échanger vos données avec ces outils.</p>
           <button class="btn block secondary" onclick="exportGedcom()" style="margin-bottom:10px;">Exporter en .GED</button>
@@ -585,6 +604,11 @@
       </div>
 
       <div class="field">
+        <label>Génération (forcer, optionnel)</label>
+        <input type="number" id="formGenManuel" min="1" step="1" placeholder="Laisser vide pour un calcul automatique">
+      </div>
+
+      <div class="field">
         <label>Parents</label>
         <div class="row2">
           <select id="formParent1"></select>
@@ -610,6 +634,8 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div id="printArea"></div>
 
 <script src="js/db.js"></script>
 <script src="js/model.js"></script>
