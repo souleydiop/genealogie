@@ -36,7 +36,7 @@ function escapeHtml(s){
 
 function computeGenerations(){
   const gen={};
-  persons.forEach(p=>gen[p.id]=0);
+  persons.forEach(p=>gen[p.id]=(typeof p.genManuel==='number' ? p.genManuel : 0));
 
   // 1) Remonte la génération d'un enfant si elle est inférieure à celle de ses parents + 1
   function recomputeFromParents(){
