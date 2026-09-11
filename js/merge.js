@@ -48,17 +48,28 @@ function mergePersonSets(baseList, incomingList, links){
   const newById = new Map(newPersons.map(p=>[p.id,p]));
 
   // 4) Pour chaque lien "meme", reporter les parents/conjoints de la fiche entrante sur
-  //    la fiche base (union, dédupliquée, max 2 parents).
+  //    la fiche base. Si les deux fiches ont déjà des parents différents (deux lignées
+  //    connues indépendamment pour la même personne), l.parentsFrom tranche le conflit :
+  //    'base' (défaut) garde les parents actuels, 'incoming' les remplace par ceux du
+  //    fichier/projet entrant. Sans choix explicite, un parent excédentaire est ignoré
+  //    avec un avertissement explicite plutôt que silencieux.
   links.filter(l=>l.type==='meme').forEach(l=>{
     const base = resultById.get(l.baseId);
     const inc = incomingById.get(l.incomingId);
     if(!base || !inc) return;
-    (inc.parents||[]).map(remap).forEach(pid=>{
-      if(!base.parents.includes(pid)){
-        if(base.parents.length<2) base.parents.push(pid);
-        else warnings.push(`${base.prenom} ${base.nom}: parent supplémentaire ignoré (déjà 2 parents).`);
-      }
-    });
+    const incParents = (inc.parents||[]).map(remap);
+
+    if(l.parentsFrom==='incoming' && incParents.length){
+      base.parents = incParents.slice(0,2);
+      if(incParents.length>2) warnings.push(`${base.prenom} ${base.nom}: plus de 2 parents entrants, seuls les 2 premiers sont conservés.`);
+    } else {
+      incParents.forEach(pid=>{
+        if(!base.parents.includes(pid)){
+          if(base.parents.length<2) base.parents.push(pid);
+          else warnings.push(`${base.prenom} ${base.nom}: parent du fichier/projet entrant ignoré car la fiche a déjà 2 parents différents — relancez la fusion avec "parents de la personne entrante" pour ce lien si c'est la bonne lignée.`);
+        }
+      });
+    }
     (inc.conjoints||[]).map(remap).forEach(cid=>{
       if(cid!==base.id && !base.conjoints.includes(cid)) base.conjoints.push(cid);
     });

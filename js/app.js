@@ -828,6 +828,7 @@ function renderMergeStep2(){
     <div class="merge-row">
       <span>${escapeHtml(fullName(autresPersonnes.find(p=>p.id===c.incomingId)||{}))}</span> = 
       <span>${escapeHtml(fullName(persons.find(p=>p.id===c.baseId)||{}))}</span>
+      <span style="opacity:.6;">(${c.parentsFrom==='incoming'?'parents entrants':'parents de ce projet'})</span>
       <button class="icon-btn" onclick="removeMergeRow(${i})">✕</button>
     </div>`).join('');
   openToolSheet(`
@@ -837,6 +838,11 @@ function renderMergeStep2(){
     <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0;">
       <select id="mergePickAutre"><option value="">Personne de l'autre projet…</option>${optsAutre}</select>
       <select id="mergePickCourant"><option value="">= Personne de ce projet…</option>${optsCourant}</select>
+      <label>Si les deux ont déjà des parents différents, garder :</label>
+      <select id="mergePickParentsFrom">
+        <option value="base">Les parents de ce projet</option>
+        <option value="incoming">Les parents de l'autre projet</option>
+      </select>
       <button class="btn outline block" onclick="addMergeRow()">➕ Ajouter cette correspondance</button>
     </div>
     <hr class="sep">
@@ -847,8 +853,9 @@ function renderMergeStep2(){
 function addMergeRow(){
   const incomingId=document.getElementById('mergePickAutre').value;
   const baseId=document.getElementById('mergePickCourant').value;
+  const parentsFrom=document.getElementById('mergePickParentsFrom').value;
   if(!incomingId || !baseId){ return; }
-  _mergeState.correspondances.push({incomingId, baseId, type:'meme'});
+  _mergeState.correspondances.push({incomingId, baseId, type:'meme', parentsFrom});
   renderMergeStep2();
 }
 function removeMergeRow(i){
@@ -866,8 +873,8 @@ async function confirmMerge(){
   _mergeState=null;
   renderAll();
   closeToolSheet();
-  showToast(warnings.length ? `Fusion effectuée avec ${warnings.length} avertissement(s)` : 'Fusion effectuée ✓');
-  if(warnings.length) console.warn('Avertissements de fusion :', warnings);
+  if(warnings.length){ alert('Fusion effectuée, mais :\n\n'+warnings.join('\n')); }
+  else { showToast('Fusion effectuée ✓'); }
 }
 
 /* ---- Importer en reliant une personne ---- */
@@ -885,12 +892,19 @@ function openImportLinkSheet(incomingList, formatLabel){
       <label>Est reliée à, dans ce projet :</label>
       <select id="linkBase"><option value="">— sélectionner —</option>${optsCourant}</select>
       <label>Type de lien</label>
-      <select id="linkType">
+      <select id="linkType" onchange="document.getElementById('linkParentsFromField').style.display=this.value==='meme'?'block':'none';">
         <option value="meme">C'est la même personne</option>
         <option value="enfant-de">La personne du fichier est enfant de celle du projet</option>
         <option value="parent-de">La personne du fichier est parent de celle du projet</option>
         <option value="conjoint-de">Elles sont conjointes</option>
       </select>
+      <div id="linkParentsFromField">
+        <label>Si les deux ont déjà des parents différents, garder :</label>
+        <select id="linkParentsFrom">
+          <option value="base">Les parents déjà dans ce projet</option>
+          <option value="incoming">Les parents du fichier importé</option>
+        </select>
+      </div>
     </div>
     <hr class="sep">
     <button class="btn block" onclick="confirmImportLink()">Importer</button>
@@ -901,7 +915,8 @@ async function confirmImportLink(){
   const incomingId=document.getElementById('linkIncoming').value;
   const baseId=document.getElementById('linkBase').value;
   const type=document.getElementById('linkType').value;
-  const links=(incomingId && baseId) ? [{incomingId, baseId, type}] : [];
+  const parentsFrom=document.getElementById('linkParentsFrom').value;
+  const links=(incomingId && baseId) ? [{incomingId, baseId, type, parentsFrom}] : [];
   const {persons:fusionnees, warnings}=mergePersonSets(persons, _importLinkState.incomingList, links);
   await dbReplaceProjectPersons(currentProjetId, fusionnees);
   await reloadPersonsForProjet();
@@ -909,8 +924,8 @@ async function confirmImportLink(){
   renderAll();
   switchView('personnes');
   closeToolSheet();
-  showToast(warnings.length ? `Importé avec ${warnings.length} avertissement(s)` : 'Importation réussie ✓');
-  if(warnings.length) console.warn('Avertissements d\'import :', warnings);
+  if(warnings.length){ alert('Importation effectuée, mais :\n\n'+warnings.join('\n')); }
+  else { showToast('Importation réussie ✓'); }
 }
 
 /* =================== TOAST =================== */
