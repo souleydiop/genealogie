@@ -123,6 +123,48 @@ test('getFocusedSet() retourne null pour un id inconnu', () => {
   assert.equal(getFocusedSet('inconnu'), null);
 });
 
+test('buildLayoutLayers() respecte un ordre manuel (ordreGen) et ignore les passes automatiques pour cette génération', () => {
+  const a = person({ prenom: 'A', ordreGen: 2 });
+  const b = person({ prenom: 'B', ordreGen: 0 });
+  const c = person({ prenom: 'C', ordreGen: 1 });
+  // Sans ordreGen, l'ordre alphabétique initial serait A,B,C ; ordreGen impose C,B,A → B... non : 0=B,1=C,2=A
+  _setPersons([a, b, c]);
+  const layers = buildLayoutLayers({ 0: [a, b, c] }, 0);
+  const order = layers[0].map(block => byId(block[0]).prenom);
+  assert.deepEqual(order, ['B', 'C', 'A']);
+});
+
+test('buildLayoutLayers() ignore ordreGen si un seul bloc de la génération en a un (verrou partiel refusé)', () => {
+  const a = person({ prenom: 'A', ordreGen: 5 }); // un seul avec ordreGen
+  const b = person({ prenom: 'B' });
+  _setPersons([a, b]);
+  const layers = buildLayoutLayers({ 0: [a, b] }, 0);
+  // Pas de verrou : tri initial retombe sur l'ordre alphabétique (A avant B)
+  const order = layers[0].map(block => byId(block[0]).prenom);
+  assert.deepEqual(order, ['A', 'B']);
+});
+
+test('buildLayoutLayers() ordonne des conjoints décalés en génération selon la position de leur époux/se', () => {
+  const a0 = person({ prenom: 'A0' }); // restera en position 0 de la génération 0
+  const b0 = person({ prenom: 'B0' });
+  const c0 = person({ prenom: 'C0' }); // restera en position 2 de la génération 0
+  a0.conjoints=[]; b0.conjoints=[]; c0.conjoints=[];
+
+  const spouseOfC0 = person({ prenom: 'SpouseC0', conjoints: [c0.id] });
+  c0.conjoints.push(spouseOfC0.id);
+  const spouseOfA0 = person({ prenom: 'SpouseA0', conjoints: [a0.id] });
+  a0.conjoints.push(spouseOfA0.id);
+
+  _setPersons([a0, b0, c0, spouseOfC0, spouseOfA0]);
+  // Génération 1 volontairement dans le "mauvais" ordre au départ (spouseOfC0 avant spouseOfA0).
+  const byGen = { 0: [a0, b0, c0], 1: [spouseOfC0, spouseOfA0] };
+  const layers = buildLayoutLayers(byGen, 1);
+
+  const idxA0 = layers[1].findIndex(block => block.includes(spouseOfA0.id));
+  const idxC0 = layers[1].findIndex(block => block.includes(spouseOfC0.id));
+  assert.ok(idxA0 < idxC0, 'le conjoint de A0 (position 0) doit passer avant celui de C0 (position 2)');
+});
+
 test('buildLayoutLayers() regroupe conjoints dans le même bloc et conserve toutes les personnes', () => {
   const a = person({ prenom: 'A' });
   const b = person({ prenom: 'B', conjoints: [a.id] });
