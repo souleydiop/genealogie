@@ -304,6 +304,16 @@
 
   .card.focus-root{box-shadow:0 0 0 3px var(--accent);}
 
+  /* ---- Glisser-déposer dans une génération ---- */
+  .block{display:flex;align-items:center;gap:2px;}
+  .block.dragging{opacity:.5;}
+  .drag-handle{
+    cursor:grab;background:none;border:none;color:var(--ink-soft);
+    font-size:15px;padding:4px 2px;touch-action:none;line-height:1;
+  }
+  .drag-handle:active{cursor:grabbing;}
+  .gen-reset{background:none;border:none;font-size:11px;cursor:pointer;padding:0;margin-top:4px;color:inherit;}
+
   /* ---- Projets / fusion / import avec lien (sheet générique) ---- */
   .projet-row{display:flex;align-items:center;gap:6px;padding:9px 0;border-bottom:1px solid var(--line);}
   .projet-name-btn{flex:1;text-align:left;background:none;border:none;font-size:15px;padding:6px 0;color:var(--ink);cursor:pointer;}
