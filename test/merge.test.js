@@ -6,6 +6,25 @@ function p(id, overrides){
   return Object.assign({ id, prenom:'', nom:'', sexe:'', naissance:'', deces:'', lieu:'', notes:'', parents:[], conjoints:[] }, overrides);
 }
 
+test('conflit de parents sur "meme" : par défaut la base gagne, avec avertissement explicite', () => {
+  const base = [ p('a1', { parents:['x','y'] }) ]; // a1 a déjà 2 parents dans le projet de base
+  const incoming = [ p('b1', { parents:['z'] }) ]; // b1 (même personne) a un parent différent
+  const { persons, warnings } = mergePersonSets(base, incoming, [{ baseId:'a1', incomingId:'b1', type:'meme' }]);
+  const a = persons.find(x=>x.id==='a1');
+  assert.deepEqual(a.parents, ['x','y'], 'les parents de la base sont conservés par défaut');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /entrant ignoré/);
+});
+
+test('conflit de parents sur "meme" avec parentsFrom:"incoming" : les parents entrants remplacent ceux de la base', () => {
+  const base = [ p('a1', { parents:['x','y'] }) ];
+  const incoming = [ p('b1', { parents:['z1','z2'] }) ];
+  const { persons, warnings } = mergePersonSets(base, incoming, [{ baseId:'a1', incomingId:'b1', type:'meme', parentsFrom:'incoming' }]);
+  const a = persons.find(x=>x.id==='a1');
+  assert.deepEqual(a.parents, ['z1','z2']);
+  assert.equal(warnings.length, 0);
+});
+
 test('lien "meme" fusionne deux fiches : champs scalaires de la base, parents/conjoints en union', () => {
   const base = [ p('a1', { prenom:'Awa', nom:'Diop', conjoints:['a2'] }), p('a2', { prenom:'Modou' }) ];
   const incoming = [ p('b1', { prenom:'Awa (import)', nom:'Diop', parents:['b2'] }), p('b2', { prenom:'GrandPere' }) ];
