@@ -123,6 +123,21 @@ function buildLayoutLayers(byGen, maxGen){
     layers.push(blocks);
   }
 
+  // Génération "verrouillée manuellement" : quand chaque bloc de la génération porte un
+  // ordreGen (posé par un glisser-déposer dans l'arbre), on respecte cet ordre tel quel et
+  // on n'y touche plus lors des passes de barycentre — sinon l'algorithme écraserait
+  // aussitôt le rangement choisi par la personne.
+  const lockedGens=new Set();
+  layers.forEach((blocks,g)=>{
+    if(blocks.length && blocks.every(block=>block.some(id=>typeof byId(id).ordreGen==='number'))){
+      lockedGens.add(g);
+      blocks.sort((a,b)=>{
+        const val=block=>Math.min(...block.map(id=>(typeof byId(id).ordreGen==='number')?byId(id).ordreGen:Infinity));
+        return val(a)-val(b);
+      });
+    }
+  });
+
   const shownIds=new Set();
   layers.forEach(l=>l.forEach(b=>b.forEach(id=>shownIds.add(id))));
 
@@ -135,6 +150,7 @@ function buildLayoutLayers(byGen, maxGen){
     return m;
   }
   function pass(g, refLayer, useParents){
+    if(lockedGens.has(g)) return;
     const refPos=posMap(refLayer);
     const withBary=layers[g].map((block,idx)=>{
       let sum=0,count=0;
@@ -142,6 +158,10 @@ function buildLayoutLayers(byGen, maxGen){
         const p=byId(id);
         const neighbors = useParents ? (p.parents||[]).filter(nid=>shownIds.has(nid)) : childrenOf(id);
         neighbors.forEach(nid=>{ if(refPos[nid]!==undefined){ sum+=refPos[nid]; count++; } });
+        // Conjoint(s) placé(s) dans la génération de référence (ex. conjoint en génération
+        // différente suite à une génération forcée) : on les tire vers cette position aussi,
+        // sinon leur trait d'union traverse plusieurs rangées sans raison.
+        (p.conjoints||[]).forEach(cid=>{ if(refPos[cid]!==undefined){ sum+=refPos[cid]; count++; } });
       });
       return {block, bary: count?sum/count:idx};
     });
@@ -149,7 +169,7 @@ function buildLayoutLayers(byGen, maxGen){
     layers[g]=withBary.map(x=>x.block);
   }
 
-  const passes=4;
+  const passes=8;
   for(let it=0;it<passes;it++){
     if(it%2===0){
       for(let g=1;g<=maxGen;g++) if(layers[g-1]) pass(g, layers[g-1], true);

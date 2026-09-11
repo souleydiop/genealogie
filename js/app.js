@@ -209,8 +209,11 @@ function renderTree(){
   let html='';
   for(let g=0;g<=maxGen;g++){
     if(layers[g].length===0) continue;
-    html+=`<div class="gen-row" data-gen="${g}"><div class="gen-label">Génération ${g+1}</div>`;
+    const locked = layers[g].every(block=>block.some(id=>typeof byId(id).ordreGen==='number'));
+    html+=`<div class="gen-row" data-gen="${g}"><div class="gen-label">Génération ${g+1}${locked?`<button class="gen-reset" onclick="resetGenOrder(${g})" title="Rétablir l\'ordre automatique">🔀</button>`:''}</div>`;
     layers[g].forEach(block=>{
+      html+=`<div class="block" data-block="${block.join(',')}">`;
+      html+=`<button class="drag-handle" title="Glisser pour réordonner" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()">⠿</button>`;
       if(block.length>=2){
         html+='<div class="couple">';
         block.forEach((id,idx)=>{
@@ -221,12 +224,73 @@ function renderTree(){
       }else{
         html+=cardHtml(byId(block[0]),focusId,gen);
       }
+      html+='</div>';
     });
     html+='</div>';
   }
   grid.className='tree-grid zoom-'+treeZoom;
   grid.innerHTML = `<svg class="connectors" id="connSvg"></svg>` + html;
+  enableDragReorder();
   requestAnimationFrame(drawConnectors);
+}
+
+/* ---- Glisser-déposer pour réordonner une génération (Pointer Events, tactile inclus) ---- */
+let _dragCtx=null;
+function enableDragReorder(){
+  document.querySelectorAll('.drag-handle').forEach(handle=>{
+    handle.onpointerdown=e=>startBlockDrag(e, handle.closest('.block'), handle.closest('.gen-row'));
+  });
+}
+function startBlockDrag(e, blockEl, rowEl){
+  e.preventDefault();
+  blockEl.setPointerCapture(e.pointerId);
+  blockEl.classList.add('dragging');
+  _dragCtx={blockEl, rowEl, pointerId:e.pointerId};
+  blockEl.onpointermove=onBlockDragMove;
+  blockEl.onpointerup=endBlockDrag;
+  blockEl.onpointercancel=endBlockDrag;
+}
+function onBlockDragMove(e){
+  if(!_dragCtx) return;
+  const {blockEl, rowEl}=_dragCtx;
+  const siblings=[...rowEl.querySelectorAll('.block')].filter(el=>el!==blockEl);
+  for(const sib of siblings){
+    const r=sib.getBoundingClientRect();
+    if(e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom){
+      const before=e.clientX < r.left+r.width/2;
+      rowEl.insertBefore(blockEl, before?sib:sib.nextSibling);
+      break;
+    }
+  }
+}
+async function endBlockDrag(e){
+  if(!_dragCtx) return;
+  const {blockEl, rowEl}=_dragCtx;
+  try{ blockEl.releasePointerCapture(e.pointerId); }catch(err){}
+  blockEl.classList.remove('dragging');
+  blockEl.onpointermove=null; blockEl.onpointerup=null; blockEl.onpointercancel=null;
+  _dragCtx=null;
+
+  const blocks=[...rowEl.querySelectorAll('.block')].map(el=>el.dataset.block.split(','));
+  let ordre=0;
+  for(const ids of blocks){
+    for(const id of ids){
+      const p=byId(id);
+      if(p){ p.ordreGen=ordre; await dbPut(p); }
+    }
+    ordre+=10;
+  }
+  await reloadPersonsForProjet();
+  renderTree();
+  showToast('Ordre enregistré pour cette génération');
+}
+async function resetGenOrder(g){
+  const gen=computeGenerations();
+  const membres=persons.filter(p=>gen[p.id]===Number(g) && typeof p.ordreGen==='number');
+  for(const p of membres){ delete p.ordreGen; await dbPut(p); }
+  await reloadPersonsForProjet();
+  renderTree();
+  showToast('Ordre automatique rétabli');
 }
 
 function cardHtml(p,focusId,gen){
@@ -495,6 +559,7 @@ async function savePerson(e){
     deces:document.getElementById('formDeces').value,
     lieu:document.getElementById('formLieu').value.trim(),
     genManuel:(()=>{ const v=document.getElementById('formGenManuel').value; return v===''?null:(parseInt(v,10)-1); })(),
+    ordreGen: editingId ? byId(editingId).ordreGen : undefined,
     notes:document.getElementById('formNotes').value.trim(),
     photo:document.getElementById('formAvatarPreview').dataset.photo||'',
     parents,
