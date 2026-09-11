@@ -304,6 +304,14 @@
 
   .card.focus-root{box-shadow:0 0 0 3px var(--accent);}
 
+  /* ---- Projets / fusion / import avec lien (sheet générique) ---- */
+  .projet-row{display:flex;align-items:center;gap:6px;padding:9px 0;border-bottom:1px solid var(--line);}
+  .projet-name-btn{flex:1;text-align:left;background:none;border:none;font-size:15px;padding:6px 0;color:var(--ink);cursor:pointer;}
+  .merge-row{display:flex;align-items:center;gap:6px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);}
+  .merge-row span{flex:1;}
+  #toolSheetBody label{display:block;font-size:12px;color:var(--ink-soft);margin:8px 0 2px;}
+  #toolSheetBody select{width:100%;}
+
   /* ---- Export PDF (impression) ---- */
   #printArea{display:none;}
   #printArea h1{font-size:20px;margin:0 0 4px;}
@@ -409,7 +417,7 @@
 <div id="app">
   <header class="topbar">
     <div>
-      <h1 id="headerTitle">Arbre Généalogique</h1>
+      <h1 id="headerTitle" onclick="openProjetSwitcher()" style="cursor:pointer;" title="Changer de projet">Arbre Généalogique</h1>
       <div class="sub" id="headerSub">Personnes</div>
     </div>
     <button class="icon-btn" id="btnHeaderAction" title="Action" style="display:none;">⤓</button>
@@ -477,16 +485,25 @@
         </div>
 
         <div class="data-card">
+          <h3>🗂️ Projets</h3>
+          <p>Chaque projet est un arbre indépendant. Le nom du projet actif s'affiche en haut de l'écran (appuyez dessus pour changer).</p>
+          <button class="btn block secondary" onclick="openProjetSwitcher()" style="margin-bottom:10px;">Gérer les projets</button>
+          <button class="btn block outline" onclick="openMergeWizard()">Fusionner avec un autre projet</button>
+        </div>
+
+        <div class="data-card">
           <h3>⬇️ Exporter (sauvegarde)</h3>
-          <p>Téléchargez toutes vos données dans un fichier JSON. Enregistrez-le ensuite sur Google Drive depuis le menu de partage pour le mettre en sécurité.</p>
+          <p>Téléchargez les données de ce projet dans un fichier JSON. Enregistrez-le ensuite sur Google Drive depuis le menu de partage pour le mettre en sécurité.</p>
           <button class="btn block" onclick="exportData()">Exporter vers un fichier</button>
         </div>
 
         <div class="data-card">
           <h3>⬆️ Importer</h3>
-          <p>Restaurez vos données depuis un fichier JSON précédemment exporté (par ex. depuis Google Drive). Cela remplacera les données actuelles.</p>
+          <p>Restaurez les données de ce projet depuis un fichier JSON précédemment exporté. Cela remplace les données du projet actif (les autres projets ne sont pas touchés).</p>
           <input type="file" id="importFile" accept="application/json,.json" style="display:none;" onchange="importData(this.files[0])">
-          <button class="btn block secondary" onclick="document.getElementById('importFile').click()">Choisir un fichier à importer</button>
+          <button class="btn block secondary" onclick="document.getElementById('importFile').click()" style="margin-bottom:10px;">Choisir un fichier à importer (remplacer)</button>
+          <input type="file" id="importFileLien" accept="application/json,.json" style="display:none;" onchange="importDataAvecLien(this.files[0])">
+          <button class="btn block outline" onclick="document.getElementById('importFileLien').click()">Importer en reliant une personne</button>
         </div>
 
         <div class="data-card">
@@ -500,13 +517,15 @@
           <p>Format standard utilisé par les logiciels de généalogie (Gramps, FamilySearch, Geneanet, Ancestry…). Pratique pour échanger vos données avec ces outils.</p>
           <button class="btn block secondary" onclick="exportGedcom()" style="margin-bottom:10px;">Exporter en .GED</button>
           <input type="file" id="importGedFile" accept=".ged,text/plain" style="display:none;" onchange="importGedcom(this.files[0])">
-          <button class="btn block outline" onclick="document.getElementById('importGedFile').click()">Importer un fichier .GED</button>
+          <button class="btn block outline" onclick="document.getElementById('importGedFile').click()" style="margin-bottom:10px;">Importer un fichier .GED (remplacer)</button>
+          <input type="file" id="importGedFileLien" accept=".ged,text/plain" style="display:none;" onchange="importGedcomAvecLien(this.files[0])">
+          <button class="btn block outline" onclick="document.getElementById('importGedFileLien').click()">Importer un .GED en reliant une personne</button>
         </div>
 
         <div class="data-card">
           <h3>🗑️ Réinitialiser</h3>
-          <p>Supprime définitivement toutes les personnes de l'application. Pensez à exporter avant si besoin.</p>
-          <button class="btn block danger" onclick="resetAll()">Tout effacer</button>
+          <p>Supprime définitivement toutes les personnes de ce projet (les autres projets ne sont pas affectés). Pensez à exporter avant si besoin.</p>
+          <button class="btn block danger" onclick="resetAll()">Tout effacer (ce projet)</button>
         </div>
 
         <div class="data-card">
@@ -637,9 +656,18 @@
 
 <div id="printArea"></div>
 
+<!-- Sheet générique : projets / fusion / import avec lien -->
+<div class="overlay" id="toolOverlay" onclick="if(event.target===this)closeToolSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div id="toolSheetBody"></div>
+  </div>
+</div>
+
 <script src="js/db.js"></script>
 <script src="js/model.js"></script>
 <script src="js/gedcom.js"></script>
+<script src="js/merge.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
