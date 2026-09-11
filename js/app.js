@@ -2,6 +2,8 @@
 let currentDetailId=null;
 let editingId=null;
 let pendingQuickAction=null; // {type:'parent'|'conjoint'|'enfant', forId}
+let projets=[];
+let currentProjetId=null;
 
 const PERSON_ICON='<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
 
@@ -26,7 +28,9 @@ function avatarHtml(p,gen){
 
 /* =================== INIT =================== */
 async function init(){
-  persons=await dbAll();
+  await ensureProjets();
+  await reloadPersonsForProjet();
+  updateHeaderTitle();
   renderAll();
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -50,8 +54,8 @@ function switchView(name){
   document.getElementById('nav-'+name).classList.add('active');
   const fab=document.getElementById('fabAdd');
   fab.style.display = (name==='donnees') ? 'none' : 'flex';
-  const titles={arbre:["Arbre Généalogique","Vue d'ensemble"],personnes:["Arbre Généalogique","Personnes"],donnees:["Arbre Généalogique","Données"]};
-  document.getElementById('headerSub').textContent=titles[name][1];
+  const titles={arbre:"Vue d'ensemble",personnes:"Personnes",donnees:"Données"};
+  document.getElementById('headerSub').textContent=titles[name];
   if(name==='arbre') setTimeout(renderTree,30);
 }
 
@@ -483,6 +487,7 @@ async function savePerson(e){
 
   const data={
     id,
+    projetId: editingId ? (byId(editingId).projetId||currentProjetId) : currentProjetId,
     prenom:document.getElementById('formPrenom').value.trim(),
     nom:document.getElementById('formNom').value.trim(),
     sexe:document.getElementById('formSexe').value,
@@ -570,12 +575,15 @@ async function shareOrDownload(blob, filename, title){
 async function exportData(){
   const payload={app:'arbre-genealogique',version:1,exportedAt:new Date().toISOString(),persons};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  await shareOrDownload(blob,`arbre-genealogique-${dateStamp()}.json`,'Sauvegarde Arbre Généalogique');
+  await shareOrDownload(blob,`${slug((currentProjet()||{}).nom||'arbre-genealogique')}-${dateStamp()}.json`,'Sauvegarde Arbre Généalogique');
   showToast('Fichier exporté');
 }
 function dateStamp(){
   const d=new Date();
   return d.toISOString().slice(0,10);
+}
+function slug(s){
+  return (s||'export').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'export';
 }
 
 function importData(file){
@@ -586,9 +594,9 @@ function importData(file){
       const data=JSON.parse(e.target.result);
       const list=Array.isArray(data)?data:data.persons;
       if(!Array.isArray(list)) throw new Error('format invalide');
-      if(!confirm(`Importer ${list.length} personne(s) ? Cela remplacera toutes les données actuelles.`)) return;
-      await dbBulkReplace(list);
-      persons=list;
+      if(!confirm(`Importer ${list.length} personne(s) ? Cela remplacera les données du projet "${(currentProjet()||{}).nom}" (les autres projets ne sont pas affectés).`)) return;
+      await dbReplaceProjectPersons(currentProjetId, list);
+      await reloadPersonsForProjet();
       renderAll();
       switchView('personnes');
       showToast('Importation réussie ✓');
@@ -600,12 +608,31 @@ function importData(file){
   document.getElementById('importFile').value='';
 }
 
+// Import JSON en reliant une personne du fichier à une personne déjà présente dans ce projet
+// (ou sans lien, pour simplement ajouter les personnes du fichier comme nouvelles entrées).
+function importDataAvecLien(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      const list=Array.isArray(data)?data:data.persons;
+      if(!Array.isArray(list) || list.length===0) throw new Error('format invalide ou vide');
+      openImportLinkSheet(list, 'JSON');
+    }catch(err){
+      alert('Fichier invalide : '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  document.getElementById('importFileLien').value='';
+}
+
 /* ---- GEDCOM ---- */
 
 async function exportGedcom(){
   const lines=buildGedcomLines(persons);
   const blob=new Blob([lines.join('\r\n')],{type:'text/plain'});
-  await shareOrDownload(blob,`arbre-genealogique-${dateStamp()}.ged`,'Export GEDCOM');
+  await shareOrDownload(blob,`${slug((currentProjet()||{}).nom||'arbre-genealogique')}-${dateStamp()}.ged`,'Export GEDCOM');
   showToast('Fichier GEDCOM exporté');
 }
 
@@ -617,9 +644,9 @@ function importGedcom(file){
       const records=parseGedcomLines(e.target.result);
       const list=gedcomToPersons(records);
       if(list.length===0) throw new Error('aucune personne trouvée');
-      if(!confirm(`Importer ${list.length} personne(s) depuis ce fichier GEDCOM ? Cela remplacera toutes les données actuelles.`)) return;
-      await dbBulkReplace(list);
-      persons=list;
+      if(!confirm(`Importer ${list.length} personne(s) depuis ce fichier GEDCOM ? Cela remplacera les données du projet "${(currentProjet()||{}).nom}" (les autres projets ne sont pas affectés).`)) return;
+      await dbReplaceProjectPersons(currentProjetId, list);
+      await reloadPersonsForProjet();
       renderAll();
       switchView('personnes');
       showToast('Importation GEDCOM réussie ✓');
@@ -631,6 +658,21 @@ function importGedcom(file){
   document.getElementById('importGedFile').value='';
 }
 
+function importGedcomAvecLien(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const list=gedcomToPersons(parseGedcomLines(e.target.result));
+      if(list.length===0) throw new Error('aucune personne trouvée');
+      openImportLinkSheet(list, 'GEDCOM');
+    }catch(err){
+      alert('Fichier GEDCOM invalide : '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  document.getElementById('importGedFileLien').value='';
+}
 
 function exportPdf(){
   const gen=computeGenerations();
@@ -638,7 +680,7 @@ function exportPdf(){
   persons.forEach(p=>{ (byGen[gen[p.id]]=byGen[gen[p.id]]||[]).push(p); });
   const gens=Object.keys(byGen).map(Number).sort((a,b)=>a-b);
 
-  let html=`<h1>Arbre Généalogique</h1><p class="print-date">Généré le ${new Date().toLocaleDateString('fr-FR')} — ${persons.length} personne(s)</p>`;
+  let html=`<h1>Arbre Généalogique — ${escapeHtml((currentProjet()||{}).nom||'')}</h1><p class="print-date">Généré le ${new Date().toLocaleDateString('fr-FR')} — ${persons.length} personne(s)</p>`;
   gens.forEach(g=>{
     html+=`<h2>Génération ${g+1}</h2><table><thead><tr><th>Nom</th><th>Dates</th><th>Lieu</th><th>Filiation</th></tr></thead><tbody>`;
     byGen[g].slice().sort((a,b)=>fullName(a).localeCompare(fullName(b),'fr')).forEach(p=>{
@@ -657,11 +699,218 @@ function exportPdf(){
 }
 
 async function resetAll(){
-  if(!confirm("Supprimer toutes les personnes de l'arbre ? Cette action est irréversible.")) return;
-  await dbClear();
+  if(!confirm(`Supprimer toutes les personnes du projet "${(currentProjet()||{}).nom}" ? Cette action est irréversible (les autres projets ne sont pas affectés).`)) return;
+  await dbReplaceProjectPersons(currentProjetId, []);
   persons=[];
   renderAll();
-  showToast('Données effacées');
+  showToast('Données du projet effacées');
+}
+
+/* =================== PROJETS (arbres multiples) =================== */
+function currentProjet(){ return projets.find(p=>p.id===currentProjetId); }
+
+function updateHeaderTitle(){
+  const el=document.getElementById('headerTitle');
+  if(el) el.textContent=((currentProjet()||{}).nom||'Arbre Généalogique')+' \u25be';
+}
+
+async function ensureProjets(){
+  projets=await dbAll(STORE_PROJETS);
+  if(projets.length===0){
+    const defaut={id:uid(),nom:'Projet principal',creeLe:new Date().toISOString()};
+    await dbPut(defaut, STORE_PROJETS);
+    projets=[defaut];
+    const existantes=await dbAll();
+    for(const p of existantes){
+      if(!p.projetId){ p.projetId=defaut.id; await dbPut(p); }
+    }
+  }
+  currentProjetId=await dbGetMeta('currentProjetId');
+  if(!currentProjetId || !projets.some(p=>p.id===currentProjetId)){
+    currentProjetId=projets[0].id;
+    await dbSetMeta('currentProjetId', currentProjetId);
+  }
+}
+async function reloadPersonsForProjet(){
+  const all=await dbAll();
+  persons=all.filter(p=>p.projetId===currentProjetId);
+}
+
+function openToolSheet(html){
+  document.getElementById('toolSheetBody').innerHTML=html;
+  document.getElementById('toolOverlay').classList.add('active');
+}
+function closeToolSheet(){
+  document.getElementById('toolOverlay').classList.remove('active');
+}
+
+function openProjetSwitcher(){
+  const rows=projets.map(pr=>`
+    <div class="projet-row">
+      <button class="projet-name-btn" onclick="switchProjet('${pr.id}')">${pr.id===currentProjetId?'✓ ':''}${escapeHtml(pr.nom)}</button>
+      <button class="icon-btn" title="Renommer" onclick="renameProjetPrompt('${pr.id}')">✏️</button>
+      <button class="icon-btn" title="Supprimer" onclick="deleteProjetConfirm('${pr.id}')">🗑️</button>
+    </div>`).join('');
+  openToolSheet(`
+    <h2 style="margin:0 0 14px;font-size:18px;">Projets (arbres)</h2>
+    <div>${rows}</div>
+    <button class="btn outline block" style="margin-top:12px;" onclick="promptNewProjet()">➕ Nouveau projet</button>
+    <hr class="sep">
+    <button class="btn block" onclick="closeToolSheet()">Fermer</button>
+  `);
+}
+async function switchProjet(id){
+  if(id!==currentProjetId){
+    currentProjetId=id;
+    await dbSetMeta('currentProjetId', id);
+    await reloadPersonsForProjet();
+    updateHeaderTitle();
+    renderAll();
+    switchView('arbre');
+    showToast('Projet : '+(currentProjet()||{}).nom);
+  }
+  closeToolSheet();
+}
+async function promptNewProjet(){
+  const nom=prompt('Nom du nouveau projet :','');
+  if(nom===null) return;
+  const proj={id:uid(),nom:nom.trim()||'Nouveau projet',creeLe:new Date().toISOString()};
+  await dbPut(proj, STORE_PROJETS);
+  projets.push(proj);
+  await switchProjet(proj.id);
+}
+async function renameProjetPrompt(id){
+  const pr=projets.find(p=>p.id===id);
+  if(!pr) return;
+  const nom=prompt('Nouveau nom :', pr.nom);
+  if(nom===null || !nom.trim()) return;
+  pr.nom=nom.trim();
+  await dbPut(pr, STORE_PROJETS);
+  updateHeaderTitle();
+  openProjetSwitcher();
+}
+async function deleteProjetConfirm(id){
+  if(projets.length<=1){ alert('Impossible de supprimer le seul projet restant.'); return; }
+  const pr=projets.find(p=>p.id===id);
+  if(!pr) return;
+  if(!confirm(`Supprimer le projet "${pr.nom}" et toutes ses personnes ? Cette action est irréversible.`)) return;
+  await dbReplaceProjectPersons(id, []);
+  await dbDelete(id, STORE_PROJETS);
+  projets=projets.filter(p=>p.id!==id);
+  if(currentProjetId===id){ await switchProjet(projets[0].id); }
+  else { openProjetSwitcher(); }
+}
+
+/* ---- Fusionner deux projets ---- */
+function openMergeWizard(){
+  const autres=projets.filter(p=>p.id!==currentProjetId);
+  if(autres.length===0){ alert('Il n\'y a pas d\'autre projet à fusionner.'); return; }
+  const rows=autres.map(p=>`<button class="btn outline block" style="margin-bottom:8px;" onclick="openMergeWizardStep2('${p.id}')">${escapeHtml(p.nom)}</button>`).join('');
+  openToolSheet(`
+    <h2 style="margin:0 0 14px;font-size:18px;">Fusionner avec…</h2>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Choisissez le projet à fusionner dans "${escapeHtml((currentProjet()||{}).nom)}". Il sera supprimé après la fusion.</p>
+    ${rows}
+    <button class="btn block" onclick="closeToolSheet()">Annuler</button>
+  `);
+}
+let _mergeState=null;
+async function openMergeWizardStep2(autreProjetId){
+  const all=await dbAll();
+  const autresPersonnes=all.filter(p=>p.projetId===autreProjetId);
+  _mergeState={autreProjetId, autresPersonnes, correspondances:[]};
+  renderMergeStep2();
+}
+function renderMergeStep2(){
+  const {autresPersonnes, correspondances}=_mergeState;
+  const optsCourant=persons.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+  const optsAutre=autresPersonnes.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+  const rows=correspondances.map((c,i)=>`
+    <div class="merge-row">
+      <span>${escapeHtml(fullName(autresPersonnes.find(p=>p.id===c.incomingId)||{}))}</span> = 
+      <span>${escapeHtml(fullName(persons.find(p=>p.id===c.baseId)||{}))}</span>
+      <button class="icon-btn" onclick="removeMergeRow(${i})">✕</button>
+    </div>`).join('');
+  openToolSheet(`
+    <h2 style="margin:0 0 10px;font-size:18px;">Faire correspondre les doublons</h2>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Uniquement pour les personnes qui existent dans les deux projets. Les autres seront simplement ajoutées.</p>
+    ${rows}
+    <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0;">
+      <select id="mergePickAutre"><option value="">Personne de l'autre projet…</option>${optsAutre}</select>
+      <select id="mergePickCourant"><option value="">= Personne de ce projet…</option>${optsCourant}</select>
+      <button class="btn outline block" onclick="addMergeRow()">➕ Ajouter cette correspondance</button>
+    </div>
+    <hr class="sep">
+    <button class="btn block" onclick="confirmMerge()">Fusionner (${autresPersonnes.length} personne(s) entrantes)</button>
+    <button class="btn outline block" style="margin-top:8px;" onclick="closeToolSheet()">Annuler</button>
+  `);
+}
+function addMergeRow(){
+  const incomingId=document.getElementById('mergePickAutre').value;
+  const baseId=document.getElementById('mergePickCourant').value;
+  if(!incomingId || !baseId){ return; }
+  _mergeState.correspondances.push({incomingId, baseId, type:'meme'});
+  renderMergeStep2();
+}
+function removeMergeRow(i){
+  _mergeState.correspondances.splice(i,1);
+  renderMergeStep2();
+}
+async function confirmMerge(){
+  const {autreProjetId, autresPersonnes, correspondances}=_mergeState;
+  const {persons:fusionnees, warnings}=mergePersonSets(persons, autresPersonnes, correspondances);
+  await dbReplaceProjectPersons(currentProjetId, fusionnees);
+  await dbReplaceProjectPersons(autreProjetId, []);
+  await dbDelete(autreProjetId, STORE_PROJETS);
+  projets=projets.filter(p=>p.id!==autreProjetId);
+  await reloadPersonsForProjet();
+  _mergeState=null;
+  renderAll();
+  closeToolSheet();
+  showToast(warnings.length ? `Fusion effectuée avec ${warnings.length} avertissement(s)` : 'Fusion effectuée ✓');
+  if(warnings.length) console.warn('Avertissements de fusion :', warnings);
+}
+
+/* ---- Importer en reliant une personne ---- */
+let _importLinkState=null;
+function openImportLinkSheet(incomingList, formatLabel){
+  _importLinkState={incomingList};
+  const optsIncoming=incomingList.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+  const optsCourant=persons.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+  openToolSheet(`
+    <h2 style="margin:0 0 10px;font-size:18px;">Importer (${formatLabel}) — ${incomingList.length} personne(s)</h2>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Reliez éventuellement une personne du fichier à une personne déjà connue de ce projet. Le reste du fichier sera ajouté normalement.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <label>Personne du fichier importé</label>
+      <select id="linkIncoming"><option value="">— Aucune (importer sans relier) —</option>${optsIncoming}</select>
+      <label>Est reliée à, dans ce projet :</label>
+      <select id="linkBase"><option value="">— sélectionner —</option>${optsCourant}</select>
+      <label>Type de lien</label>
+      <select id="linkType">
+        <option value="meme">C'est la même personne</option>
+        <option value="enfant-de">La personne du fichier est enfant de celle du projet</option>
+        <option value="parent-de">La personne du fichier est parent de celle du projet</option>
+        <option value="conjoint-de">Elles sont conjointes</option>
+      </select>
+    </div>
+    <hr class="sep">
+    <button class="btn block" onclick="confirmImportLink()">Importer</button>
+    <button class="btn outline block" style="margin-top:8px;" onclick="closeToolSheet()">Annuler</button>
+  `);
+}
+async function confirmImportLink(){
+  const incomingId=document.getElementById('linkIncoming').value;
+  const baseId=document.getElementById('linkBase').value;
+  const type=document.getElementById('linkType').value;
+  const links=(incomingId && baseId) ? [{incomingId, baseId, type}] : [];
+  const {persons:fusionnees, warnings}=mergePersonSets(persons, _importLinkState.incomingList, links);
+  await dbReplaceProjectPersons(currentProjetId, fusionnees);
+  await reloadPersonsForProjet();
+  _importLinkState=null;
+  renderAll();
+  switchView('personnes');
+  closeToolSheet();
+  showToast(warnings.length ? `Importé avec ${warnings.length} avertissement(s)` : 'Importation réussie ✓');
+  if(warnings.length) console.warn('Avertissements d\'import :', warnings);
 }
 
 /* =================== TOAST =================== */
