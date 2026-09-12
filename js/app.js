@@ -438,6 +438,11 @@ function personOptionLabel(p, gen){
   const n=typeof p.numero==='number' ? ' #'+p.numero : '';
   return escapeHtml(fullName(p))+g+n;
 }
+// Tri nom puis prénom (ordre alphabétique) — utilisé dans les listes de fusion/import,
+// où repérer un homonyme est plus facile en triant par nom de famille.
+function parNomPrenom(a,b){
+  return (a.nom||'').localeCompare(b.nom||'','fr') || (a.prenom||'').localeCompare(b.prenom||'','fr');
+}
 // Calcule les générations pour un lot de personnes qui n'est pas l'état courant
 // (ex. l'autre projet dans l'assistant de fusion, ou un fichier importé) sans
 // perturber l'état global — computeGenerations()/byId() lisent la variable
@@ -944,9 +949,9 @@ function renderMergeStep2(){
   const genAutre=autresPersonnes.length?computeGenerationsFor(autresPersonnes):{};
   const incomingUtilises=new Set(correspondances.map(c=>c.incomingId));
   const baseUtilises=new Set(correspondances.map(c=>c.baseId));
-  const optsCourant=persons.filter(p=>!baseUtilises.has(p.id))
+  const optsCourant=persons.filter(p=>!baseUtilises.has(p.id)).sort(parNomPrenom)
     .map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
-  const optsAutre=autresPersonnes.filter(p=>!incomingUtilises.has(p.id))
+  const optsAutre=autresPersonnes.filter(p=>!incomingUtilises.has(p.id)).sort(parNomPrenom)
     .map(p=>`<option value="${p.id}">${personOptionLabel(p,genAutre)}</option>`).join('');
   const rows=correspondances.map((c,i)=>{
     const inc=autresPersonnes.find(p=>p.id===c.incomingId)||{};
@@ -1040,8 +1045,8 @@ function openImportLinkSheet(incomingList, formatLabel){
   _importLinkState={incomingList};
   const genIncoming=incomingList.length?computeGenerationsFor(incomingList):{};
   const genCourant=persons.length?computeGenerations():{};
-  const optsIncoming=incomingList.map(p=>`<option value="${p.id}">${personOptionLabel(p,genIncoming)}</option>`).join('');
-  const optsCourant=persons.map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
+  const optsIncoming=incomingList.slice().sort(parNomPrenom).map(p=>`<option value="${p.id}">${personOptionLabel(p,genIncoming)}</option>`).join('');
+  const optsCourant=persons.slice().sort(parNomPrenom).map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
   openToolSheet(`
     <h2 style="margin:0 0 10px;font-size:18px;">Importer (${formatLabel}) — ${incomingList.length} personne(s)</h2>
     <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Reliez éventuellement une personne du fichier à une personne déjà connue de ce projet. Le reste du fichier sera ajouté normalement.</p>
