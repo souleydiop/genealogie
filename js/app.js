@@ -964,8 +964,9 @@ function renderMergeStep2(){
     <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Uniquement pour les personnes qui existent dans les deux projets. Les autres seront simplement ajoutées. Chaque personne ne peut être utilisée que dans une seule correspondance.</p>
     ${rows}
     <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0;">
-      <select id="mergePickAutre"><option value="">Personne de l'autre projet…</option>${optsAutre}</select>
-      <select id="mergePickCourant"><option value="">= Personne de ce projet…</option>${optsCourant}</select>
+      <select id="mergePickAutre" onchange="renderParentsPreview('mergePickAutre','mergePickCourant','mergeParentsPreview',_mergeState.autresPersonnes)"><option value="">Personne de l'autre projet…</option>${optsAutre}</select>
+      <select id="mergePickCourant" onchange="renderParentsPreview('mergePickAutre','mergePickCourant','mergeParentsPreview',_mergeState.autresPersonnes)"><option value="">= Personne de ce projet…</option>${optsCourant}</select>
+      <div id="mergeParentsPreview"></div>
       <label>Si les deux ont déjà des parents différents, garder :</label>
       <select id="mergePickParentsFrom">
         <option value="base">Les parents de ce projet</option>
@@ -977,6 +978,34 @@ function renderMergeStep2(){
     <button class="btn block" onclick="confirmMerge()">Fusionner (${autresPersonnes.length} personne(s) entrantes)</button>
     <button class="btn outline block" style="margin-top:8px;" onclick="closeToolSheet()">Annuler</button>
   `);
+}
+// Compare les parents des deux côtés d'une correspondance envisagée, pour repérer un
+// conflit AVANT de valider (c'est l'absence de cette vérification qui avait causé le
+// problème avec "Lobé Diop" : deux personnes du même nom mais de lignées différentes).
+function renderParentsPreview(selIncomingId, selBaseId, previewId, incomingListe){
+  const incomingId=document.getElementById(selIncomingId).value;
+  const baseId=document.getElementById(selBaseId).value;
+  const el=document.getElementById(previewId);
+  if(!el) return;
+  if(!incomingId || !baseId){ el.innerHTML=''; return; }
+  const inc=incomingListe.find(p=>p.id===incomingId);
+  const base=persons.find(p=>p.id===baseId);
+  if(!inc || !base){ el.innerHTML=''; return; }
+  const nomParent=(pid,liste)=>{ const p=liste.find(x=>x.id===pid); return p?fullName(p):null; };
+  const incParents=(inc.parents||[]).map(pid=>nomParent(pid,incomingListe)).filter(Boolean);
+  const baseParents=(base.parents||[]).map(pid=>nomParent(pid,persons)).filter(Boolean);
+  const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const uneCorrespondance=incParents.some(a=>baseParents.some(b=>norm(a)===norm(b)));
+  const conflit=incParents.length && baseParents.length && !uneCorrespondance;
+  let statut;
+  if(uneCorrespondance) statut='✅ Au moins un parent correspond des deux côtés';
+  else if(conflit) statut='⚠️ Parents différents des deux côtés — vérifiez avant de fusionner, ce n\'est peut-être pas la même personne (ou choisissez lequel garder)';
+  else statut='ℹ️ Au moins un côté n\'a pas de parent connu — rien à comparer';
+  el.innerHTML=`<div style="font-size:12px;background:rgba(0,0,0,.04);border-radius:10px;padding:8px 10px;">
+    <div><b>Parents (entrant)</b> : ${incParents.length?escapeHtml(incParents.join(' & ')):'aucun connu'}</div>
+    <div><b>Parents (ce projet)</b> : ${baseParents.length?escapeHtml(baseParents.join(' & ')):'aucun connu'}</div>
+    <div style="margin-top:4px;">${statut}</div>
+  </div>`;
 }
 function addMergeRow(){
   const incomingId=document.getElementById('mergePickAutre').value;
@@ -1018,9 +1047,10 @@ function openImportLinkSheet(incomingList, formatLabel){
     <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Reliez éventuellement une personne du fichier à une personne déjà connue de ce projet. Le reste du fichier sera ajouté normalement.</p>
     <div style="display:flex;flex-direction:column;gap:8px;">
       <label>Personne du fichier importé</label>
-      <select id="linkIncoming"><option value="">— Aucune (importer sans relier) —</option>${optsIncoming}</select>
+      <select id="linkIncoming" onchange="renderParentsPreview('linkIncoming','linkBase','linkParentsPreview',_importLinkState.incomingList)"><option value="">— Aucune (importer sans relier) —</option>${optsIncoming}</select>
       <label>Est reliée à, dans ce projet :</label>
-      <select id="linkBase"><option value="">— sélectionner —</option>${optsCourant}</select>
+      <select id="linkBase" onchange="renderParentsPreview('linkIncoming','linkBase','linkParentsPreview',_importLinkState.incomingList)"><option value="">— sélectionner —</option>${optsCourant}</select>
+      <div id="linkParentsPreview"></div>
       <label>Type de lien</label>
       <select id="linkType" onchange="document.getElementById('linkParentsFromField').style.display=this.value==='meme'?'block':'none';">
         <option value="meme">C'est la même personne</option>
