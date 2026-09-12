@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mergePersonSets } = require('../js/merge.js');
+const { mergePersonSets, suggestMatches } = require('../js/merge.js');
 
 function p(id, overrides){
   return Object.assign({ id, prenom:'', nom:'', sexe:'', naissance:'', deces:'', lieu:'', notes:'', parents:[], conjoints:[] }, overrides);
@@ -23,6 +23,40 @@ test('conflit de parents sur "meme" avec parentsFrom:"incoming" : les parents en
   const a = persons.find(x=>x.id==='a1');
   assert.deepEqual(a.parents, ['z1','z2']);
   assert.equal(warnings.length, 0);
+});
+
+test('suggestMatches() propose une paire quand même nom+prénom ET un parent en commun', () => {
+  const baseParent = p('bp1', { prenom:'Sidy', nom:'Diop' });
+  const base = [ baseParent, p('a1', { prenom:'Lobé', nom:'Diop', parents:['bp1'] }) ];
+  const incParent = p('ip1', { prenom:'Sidy', nom:'Diop' });
+  const incoming = [ incParent, p('b1', { prenom:'Lobé', nom:'Diop', parents:['ip1'] }) ];
+  const suggestions = suggestMatches(base, incoming);
+  assert.deepEqual(suggestions, [{ baseId:'a1', incomingId:'b1' }]);
+});
+
+test('suggestMatches() ne propose rien si même nom mais parents différents (cas Lobé Diop)', () => {
+  const base = [ p('bp1', { prenom:'Sidy', nom:'Diop' }), p('a1', { prenom:'Lobé', nom:'Diop', parents:['bp1'] }) ];
+  const incoming = [ p('ip1', { prenom:'El Hadji Sidy', nom:'Diop' }), p('b1', { prenom:'Lobé', nom:'Diop', parents:['ip1'] }) ];
+  assert.deepEqual(suggestMatches(base, incoming), []);
+});
+
+test('suggestMatches() ne propose rien si un des deux côtés n\'a aucun parent connu', () => {
+  const base = [ p('a1', { prenom:'Lobé', nom:'Diop' }) ]; // pas de parent
+  const incoming = [ p('ip1', { prenom:'Sidy', nom:'Diop' }), p('b1', { prenom:'Lobé', nom:'Diop', parents:['ip1'] }) ];
+  assert.deepEqual(suggestMatches(base, incoming), []);
+});
+
+test('suggestMatches() ignore les noms différents même avec des parents communs', () => {
+  const parent = p('bp1', { prenom:'Sidy', nom:'Diop' });
+  const base = [ parent, p('a1', { prenom:'Awa', nom:'Diop', parents:['bp1'] }) ];
+  const incoming = [ p('ip1', { prenom:'Sidy', nom:'Diop' }), p('b1', { prenom:'Fatou', nom:'Diop', parents:['ip1'] }) ];
+  assert.deepEqual(suggestMatches(base, incoming), []);
+});
+
+test('suggestMatches() est insensible aux accents et à la casse', () => {
+  const base = [ p('bp1', { prenom:'sidy', nom:'DIOP' }), p('a1', { prenom:'lobe', nom:'diop', parents:['bp1'] }) ];
+  const incoming = [ p('ip1', { prenom:'Sídy', nom:'Diöp' }), p('b1', { prenom:'Lobé', nom:'Diop', parents:['ip1'] }) ];
+  assert.deepEqual(suggestMatches(base, incoming), [{ baseId:'a1', incomingId:'b1' }]);
 });
 
 test('lien "meme" fusionne deux fiches : champs scalaires de la base, parents/conjoints en union', () => {
