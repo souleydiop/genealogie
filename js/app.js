@@ -93,18 +93,18 @@ let treeZoom=1; // 0=compact, 1=normal, 2=grand
 let lastMaxGen=-1;
 // Remplit les sélecteurs de filtre (personne ciblée + plage de générations)
 function populateTreeFilters(){
+  const gen=persons.length?computeGenerations():{};
   const focusSel=document.getElementById('treeFocus');
   const prevFocus=focusSel.value;
   const sortedP=[...persons].sort((a,b)=>fullName(a).localeCompare(fullName(b)));
   focusSel.innerHTML='<option value="">🌳 Arbre complet</option>'+
-    sortedP.map(p=>`<option value="${p.id}">🎯 Centrer sur ${escapeHtml(fullName(p))}</option>`).join('');
+    sortedP.map(p=>`<option value="${p.id}">🎯 Centrer sur ${personOptionLabel(p,gen)}</option>`).join('');
   if(sortedP.some(p=>p.id===prevFocus)) focusSel.value=prevFocus;
 
   const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
   const prevFrom=fromSel.value, prevTo=toSel.value;
   let maxGen=0;
   if(persons.length){
-    const gen=computeGenerations();
     maxGen=Math.max(...Object.values(gen));
   }
   let opts='';
@@ -432,10 +432,27 @@ function focusInTree(){
 }
 
 /* =================== FORMULAIRE =================== */
+function personOptionLabel(p, gen){
+  const g=gen && gen[p.id]!==undefined ? ' (G'+(gen[p.id]+1)+')' : '';
+  return escapeHtml(fullName(p))+g;
+}
+// Calcule les générations pour un lot de personnes qui n'est pas l'état courant
+// (ex. l'autre projet dans l'assistant de fusion, ou un fichier importé) sans
+// perturber l'état global — computeGenerations()/byId() lisent la variable
+// partagée `persons`, donc on la substitue temporairement le temps du calcul.
+function computeGenerationsFor(list){
+  const backup=persons;
+  persons=list;
+  const gen=computeGenerations();
+  persons=backup;
+  return gen;
+}
+
 function fillSelect(sel,excludeId,placeholder){
+  const gen=persons.length?computeGenerations():{};
   sel.innerHTML=`<option value="">${placeholder}</option>`+
     persons.filter(p=>p.id!==excludeId).sort((a,b)=>fullName(a).localeCompare(fullName(b)))
-      .map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+      .map(p=>`<option value="${p.id}">${personOptionLabel(p,gen)}</option>`).join('');
 }
 
 function openPersonForm(id=null){
@@ -887,8 +904,10 @@ async function openMergeWizardStep2(autreProjetId){
 }
 function renderMergeStep2(){
   const {autresPersonnes, correspondances}=_mergeState;
-  const optsCourant=persons.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
-  const optsAutre=autresPersonnes.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+  const genCourant=persons.length?computeGenerations():{};
+  const genAutre=autresPersonnes.length?computeGenerationsFor(autresPersonnes):{};
+  const optsCourant=persons.map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
+  const optsAutre=autresPersonnes.map(p=>`<option value="${p.id}">${personOptionLabel(p,genAutre)}</option>`).join('');
   const rows=correspondances.map((c,i)=>`
     <div class="merge-row">
       <span>${escapeHtml(fullName(autresPersonnes.find(p=>p.id===c.incomingId)||{}))}</span> = 
@@ -946,8 +965,10 @@ async function confirmMerge(){
 let _importLinkState=null;
 function openImportLinkSheet(incomingList, formatLabel){
   _importLinkState={incomingList};
-  const optsIncoming=incomingList.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
-  const optsCourant=persons.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join('');
+  const genIncoming=incomingList.length?computeGenerationsFor(incomingList):{};
+  const genCourant=persons.length?computeGenerations():{};
+  const optsIncoming=incomingList.map(p=>`<option value="${p.id}">${personOptionLabel(p,genIncoming)}</option>`).join('');
+  const optsCourant=persons.map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
   openToolSheet(`
     <h2 style="margin:0 0 10px;font-size:18px;">Importer (${formatLabel}) — ${incomingList.length} personne(s)</h2>
     <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Reliez éventuellement une personne du fichier à une personne déjà connue de ce projet. Le reste du fichier sera ajouté normalement.</p>

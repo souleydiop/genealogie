@@ -16,8 +16,9 @@ function dateRange(p){
 }
 
 
-function personSubtitle(p){
+function personSubtitle(p, gen){
   const parts=[];
+  if(gen && gen[p.id]!==undefined) parts.push('G'+(gen[p.id]+1));
   const dr=dateRange(p);
   if(dr) parts.push(dr);
   if(p.lieu) parts.push(p.lieu);
