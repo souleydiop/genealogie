@@ -80,7 +80,7 @@ function renderPersonsList(){
         <div class="name">${escapeHtml(fullName(p))}</div>
         <div class="meta">${personSubtitle(p)}</div>
       </div>
-      <div class="gen-badge">G${(gen[p.id]||0)+1}</div>
+      <div class="gen-badge">G${(gen[p.id]||0)+1}${typeof p.numero==='number'?' · #'+p.numero:''}</div>
       <div class="chev">›</div>
     </div>
   `).join('') || `<p style="text-align:center;color:var(--ink-soft);padding:30px 0;">Aucun résultat</p>`;
@@ -390,6 +390,7 @@ function openDetail(id){
   document.getElementById('detailName').textContent=fullName(p);
   let dates=dateRange(p);
   if(p.lieu) dates += (dates?' · ':'')+p.lieu;
+  if(typeof p.numero==='number') dates += (dates?' · ':'')+'#'+p.numero;
   document.getElementById('detailDates').textContent=dates;
   document.getElementById('detailNotes').textContent=p.notes||'';
   document.getElementById('detailOverlay').classList.add('active');
@@ -434,7 +435,8 @@ function focusInTree(){
 /* =================== FORMULAIRE =================== */
 function personOptionLabel(p, gen){
   const g=gen && gen[p.id]!==undefined ? ' (G'+(gen[p.id]+1)+')' : '';
-  return escapeHtml(fullName(p))+g;
+  const n=typeof p.numero==='number' ? ' #'+p.numero : '';
+  return escapeHtml(fullName(p))+g+n;
 }
 // Calcule les générations pour un lot de personnes qui n'est pas l'état courant
 // (ex. l'autre projet dans l'assistant de fusion, ou un fichier importé) sans
@@ -577,6 +579,7 @@ async function savePerson(e){
     lieu:document.getElementById('formLieu').value.trim(),
     genManuel:(()=>{ const v=document.getElementById('formGenManuel').value; return v===''?null:(parseInt(v,10)-1); })(),
     ordreGen: editingId ? byId(editingId).ordreGen : undefined,
+    numero: editingId ? byId(editingId).numero : await nextNumero(),
     notes:document.getElementById('formNotes').value.trim(),
     photo:document.getElementById('formAvatarPreview').dataset.photo||'',
     parents,
@@ -816,6 +819,32 @@ async function ensureProjets(){
 async function reloadPersonsForProjet(){
   const all=await dbAll();
   persons=all.filter(p=>p.projetId===currentProjetId);
+  await ensureNumeros();
+}
+// Attribue un numéro d'identification stable (#1, #2…) aux personnes qui n'en ont pas
+// encore (import, fusion, ou données créées avant l'ajout de ce champ). Une fois posé,
+// un numéro ne change jamais, même si d'autres personnes sont ajoutées ou supprimées.
+async function ensureNumeros(){
+  const projet=currentProjet();
+  if(!projet) return;
+  let next=projet.prochainNumero||1;
+  const sansNumero=persons.filter(p=>typeof p.numero!=='number').sort((a,b)=>fullName(a).localeCompare(fullName(b)));
+  for(const p of sansNumero){
+    p.numero=next++;
+    await dbPut(p);
+  }
+  if(sansNumero.length || projet.prochainNumero!==next){
+    projet.prochainNumero=next;
+    await dbPut(projet, STORE_PROJETS);
+  }
+}
+async function nextNumero(){
+  const projet=currentProjet();
+  if(!projet) return 1;
+  const n=projet.prochainNumero||1;
+  projet.prochainNumero=n+1;
+  await dbPut(projet, STORE_PROJETS);
+  return n;
 }
 
 function openToolSheet(html){
@@ -906,18 +935,26 @@ function renderMergeStep2(){
   const {autresPersonnes, correspondances}=_mergeState;
   const genCourant=persons.length?computeGenerations():{};
   const genAutre=autresPersonnes.length?computeGenerationsFor(autresPersonnes):{};
-  const optsCourant=persons.map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
-  const optsAutre=autresPersonnes.map(p=>`<option value="${p.id}">${personOptionLabel(p,genAutre)}</option>`).join('');
-  const rows=correspondances.map((c,i)=>`
+  const incomingUtilises=new Set(correspondances.map(c=>c.incomingId));
+  const baseUtilises=new Set(correspondances.map(c=>c.baseId));
+  const optsCourant=persons.filter(p=>!baseUtilises.has(p.id))
+    .map(p=>`<option value="${p.id}">${personOptionLabel(p,genCourant)}</option>`).join('');
+  const optsAutre=autresPersonnes.filter(p=>!incomingUtilises.has(p.id))
+    .map(p=>`<option value="${p.id}">${personOptionLabel(p,genAutre)}</option>`).join('');
+  const rows=correspondances.map((c,i)=>{
+    const inc=autresPersonnes.find(p=>p.id===c.incomingId)||{};
+    const base=persons.find(p=>p.id===c.baseId)||{};
+    return `
     <div class="merge-row">
-      <span>${escapeHtml(fullName(autresPersonnes.find(p=>p.id===c.incomingId)||{}))}</span> = 
-      <span>${escapeHtml(fullName(persons.find(p=>p.id===c.baseId)||{}))}</span>
+      <span>${personOptionLabel(inc,genAutre)}</span> = 
+      <span>${personOptionLabel(base,genCourant)}</span>
       <span style="opacity:.6;">(${c.parentsFrom==='incoming'?'parents entrants':'parents de ce projet'})</span>
       <button class="icon-btn" onclick="removeMergeRow(${i})">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   openToolSheet(`
     <h2 style="margin:0 0 10px;font-size:18px;">Faire correspondre les doublons</h2>
-    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Uniquement pour les personnes qui existent dans les deux projets. Les autres seront simplement ajoutées.</p>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Uniquement pour les personnes qui existent dans les deux projets. Les autres seront simplement ajoutées. Chaque personne ne peut être utilisée que dans une seule correspondance.</p>
     ${rows}
     <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0;">
       <select id="mergePickAutre"><option value="">Personne de l'autre projet…</option>${optsAutre}</select>
