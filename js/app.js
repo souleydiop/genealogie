@@ -15,7 +15,8 @@ function updateNameCounts(){
     nameCounts[n]=(nameCounts[n]||0)+1;
   });
 }
-// Contenu de l'avatar : photo, sinon génération si homonyme, sinon icône générique
+// Contenu de l'avatar : photo, sinon génération si homonyme, sinon symbole homme/femme
+// (ou icône générique si le sexe n'est pas renseigné)
 function avatarHtml(p,gen){
   if(p.photo) return `<img src="${p.photo}">`;
   const n=fullName(p).trim().toLowerCase();
@@ -23,6 +24,8 @@ function avatarHtml(p,gen){
     const g=gen?gen[p.id]:computeGenerations()[p.id];
     return `<span class="avatar-gen">G${(g||0)+1}</span>`;
   }
+  if(p.sexe==='H') return '<span class="avatar-symbol">♂</span>';
+  if(p.sexe==='F') return '<span class="avatar-symbol">♀</span>';
   return PERSON_ICON;
 }
 
@@ -331,11 +334,11 @@ function drawConnectors(){
     parentEls.forEach(el=>{const c=center(el); sumX+=c.x; sumY+=c.bottom;});
     const px=sumX/parentEls.length, py=sumY/parentEls.length;
     const cc=center(childEl);
-    const midY=(py+cc.top)/2;
-    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('d',`M ${px} ${py} C ${px} ${midY}, ${cc.x} ${midY}, ${cc.x} ${cc.top}`);
-    path.setAttribute('class','branch');
-    svg.appendChild(path);
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',px);line.setAttribute('y1',py);
+    line.setAttribute('x2',cc.x);line.setAttribute('y2',cc.top);
+    line.setAttribute('class','branch');
+    svg.appendChild(line);
   });
   // couple union lines
   const drawn=new Set();
