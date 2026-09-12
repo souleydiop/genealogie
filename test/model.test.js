@@ -60,6 +60,13 @@ test('personSubtitle() combine dates, lieu et filiation', () => {
   assert.equal(personSubtitle(parent), '\u00A0');
 });
 
+test('personSubtitle() ajoute "G<n>" en tête quand une carte de générations est fournie', () => {
+  const p = person({ prenom: 'Awa', nom: 'Diop', lieu: 'Dakar' });
+  _setPersons([p]);
+  assert.equal(personSubtitle(p, { [p.id]: 2 }), 'G3 · Dakar');
+  assert.equal(personSubtitle(p), 'Dakar', 'sans carte de générations, comportement inchangé');
+});
+
 test('computeGenerations() place les enfants une génération après leurs parents', () => {
   const gp = person({ prenom: 'GrandParent' });
   const parent = person({ prenom: 'Parent', parents: [gp.id] });
