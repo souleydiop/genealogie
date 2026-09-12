@@ -103,4 +103,42 @@ function mergePersonSets(baseList, incomingList, links){
   return { persons: result.concat(newPersons), warnings };
 }
 
-if(typeof module!=='undefined') module.exports={mergePersonSets};
+/* =================== SUGGESTION AUTOMATIQUE DE CORRESPONDANCES (pure) =================== */
+// Repère les paires (personne base, personne entrante) qui sont probablement la même
+// personne, selon deux critères cumulatifs :
+//   1. même prénom + nom (comparaison insensible aux accents/casse)
+//   2. au moins un parent en commun (par nom), sur les deux côtés
+// Le critère 2 est volontairement exigé : un nom identique seul ne suffit pas (cas vécu
+// de deux "Lobé Diop" sans lien de parenté). Sans parent connu d'un côté ou de l'autre,
+// la paire n'est PAS suggérée — mieux vaut une vérification manuelle qu'un faux positif.
+// Retourne une liste de {baseId, incomingId} à proposer, jamais à appliquer aveuglément.
+
+function normaliserNom(s){
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+}
+
+function suggestMatches(baseList, incomingList){
+  const nomComplet = p => normaliserNom((p.prenom||'')+' '+(p.nom||''));
+  const nomsParents = (p, liste) => (p.parents||[])
+    .map(pid => liste.find(x=>x.id===pid))
+    .filter(Boolean)
+    .map(nomComplet);
+
+  const suggestions=[];
+  incomingList.forEach(inc=>{
+    const incNom=nomComplet(inc);
+    const incParents=nomsParents(inc, incomingList);
+    if(!incParents.length) return; // rien à comparer côté entrant
+
+    baseList.forEach(base=>{
+      if(nomComplet(base)!==incNom) return;
+      const baseParents=nomsParents(base, baseList);
+      if(!baseParents.length) return; // rien à comparer côté base
+      const parentCommun=incParents.some(n=>baseParents.includes(n));
+      if(parentCommun) suggestions.push({baseId:base.id, incomingId:inc.id});
+    });
+  });
+  return suggestions;
+}
+
+if(typeof module!=='undefined') module.exports={mergePersonSets, suggestMatches};

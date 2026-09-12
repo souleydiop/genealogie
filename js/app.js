@@ -940,8 +940,10 @@ async function openMergeWizardStep2(autreProjetId){
   const all=await dbAll();
   const autresPersonnes=all.filter(p=>p.projetId===autreProjetId);
   await ensureNumerosPourProjet(autreProjetId, autresPersonnes);
-  _mergeState={autreProjetId, autresPersonnes, correspondances:[]};
+  const suggestions=suggestMatches(persons, autresPersonnes).map(s=>Object.assign({type:'meme',parentsFrom:'base'},s));
+  _mergeState={autreProjetId, autresPersonnes, correspondances:suggestions};
   renderMergeStep2();
+  if(suggestions.length) showToast(`${suggestions.length} correspondance(s) suggérée(s) automatiquement — à vérifier`);
 }
 function renderMergeStep2(){
   const {autresPersonnes, correspondances}=_mergeState;
@@ -966,7 +968,7 @@ function renderMergeStep2(){
   }).join('');
   openToolSheet(`
     <h2 style="margin:0 0 10px;font-size:18px;">Faire correspondre les doublons</h2>
-    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Uniquement pour les personnes qui existent dans les deux projets. Les autres seront simplement ajoutées. Chaque personne ne peut être utilisée que dans une seule correspondance.</p>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Uniquement pour les personnes qui existent dans les deux projets. Les autres seront simplement ajoutées, avec toute leur descendance. Chaque personne ne peut être utilisée que dans une seule correspondance. Les lignes déjà présentes ci-dessous sont des suggestions automatiques (même nom + un parent en commun) — vérifiez-les avant de fusionner.</p>
     ${rows}
     <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0;">
       <select id="mergePickAutre" onchange="renderParentsPreview('mergePickAutre','mergePickCourant','mergeParentsPreview',_mergeState.autresPersonnes)"><option value="">Personne de l'autre projet…</option>${optsAutre}</select>
