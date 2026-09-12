@@ -824,11 +824,13 @@ async function reloadPersonsForProjet(){
 // Attribue un numéro d'identification stable (#1, #2…) aux personnes qui n'en ont pas
 // encore (import, fusion, ou données créées avant l'ajout de ce champ). Une fois posé,
 // un numéro ne change jamais, même si d'autres personnes sont ajoutées ou supprimées.
-async function ensureNumeros(){
-  const projet=currentProjet();
+// Réutilisable pour N'IMPORTE QUEL projet (pas seulement le projet actif) — utile par ex.
+// pour numéroter "l'autre projet" avant de l'afficher dans l'assistant de fusion.
+async function ensureNumerosPourProjet(projetId, liste){
+  const projet=projets.find(p=>p.id===projetId);
   if(!projet) return;
   let next=projet.prochainNumero||1;
-  const sansNumero=persons.filter(p=>typeof p.numero!=='number').sort((a,b)=>fullName(a).localeCompare(fullName(b)));
+  const sansNumero=liste.filter(p=>typeof p.numero!=='number').sort((a,b)=>fullName(a).localeCompare(fullName(b)));
   for(const p of sansNumero){
     p.numero=next++;
     await dbPut(p);
@@ -837,6 +839,10 @@ async function ensureNumeros(){
     projet.prochainNumero=next;
     await dbPut(projet, STORE_PROJETS);
   }
+}
+async function ensureNumeros(){
+  if(!currentProjetId) return;
+  await ensureNumerosPourProjet(currentProjetId, persons);
 }
 async function nextNumero(){
   const projet=currentProjet();
@@ -928,6 +934,7 @@ let _mergeState=null;
 async function openMergeWizardStep2(autreProjetId){
   const all=await dbAll();
   const autresPersonnes=all.filter(p=>p.projetId===autreProjetId);
+  await ensureNumerosPourProjet(autreProjetId, autresPersonnes);
   _mergeState={autreProjetId, autresPersonnes, correspondances:[]};
   renderMergeStep2();
 }
