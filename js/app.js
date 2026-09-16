@@ -339,6 +339,13 @@ function drawConnectors(){
     line.setAttribute('x2',cc.x);line.setAttribute('y2',cc.top);
     line.setAttribute('class','branch');
     svg.appendChild(line);
+    const childId=p.id, parentIds=p.parents.slice();
+    const hit=document.createElementNS('http://www.w3.org/2000/svg','line');
+    hit.setAttribute('x1',px);hit.setAttribute('y1',py);
+    hit.setAttribute('x2',cc.x);hit.setAttribute('y2',cc.top);
+    hit.setAttribute('class','link-hit');
+    hit.addEventListener('click',()=>openLinkEditSheet('branch',{childId,parentIds}));
+    svg.appendChild(hit);
   });
   // couple union lines
   const drawn=new Set();
@@ -354,10 +361,66 @@ function drawConnectors(){
       line.setAttribute('x2',cb.x);line.setAttribute('y2',cb.y);
       line.setAttribute('class','union');
       svg.appendChild(line);
+      const id1=p.id, id2=cid;
+      const hit=document.createElementNS('http://www.w3.org/2000/svg','line');
+      hit.setAttribute('x1',ca.x);hit.setAttribute('y1',ca.y);
+      hit.setAttribute('x2',cb.x);hit.setAttribute('y2',cb.y);
+      hit.setAttribute('class','link-hit');
+      hit.addEventListener('click',()=>openLinkEditSheet('union',{id1,id2}));
+      svg.appendChild(hit);
     });
   });
 }
 window.addEventListener('resize',()=>{ if(document.getElementById('view-arbre').classList.contains('active')) drawConnectors(); });
+
+/* ---- Édition d'une liaison depuis l'arbre (clic sur un trait) ---- */
+function openLinkEditSheet(kind, data){
+  if(kind==='union'){
+    const {id1,id2}=data;
+    const p1=byId(id1), p2=byId(id2);
+    if(!p1||!p2) return;
+    openToolSheet(`
+      <h2 style="margin:0 0 10px;font-size:18px;">Lien conjoint</h2>
+      <p style="font-size:14px;">${escapeHtml(fullName(p1))} et ${escapeHtml(fullName(p2))} sont enregistrés comme conjoints.</p>
+      <button class="btn danger block" onclick="deleteUnionLink('${id1}','${id2}')">Délier ce couple</button>
+      <button class="btn outline block" style="margin-top:8px;" onclick="closeToolSheet()">Annuler</button>
+    `);
+  } else if(kind==='branch'){
+    const {childId, parentIds}=data;
+    const child=byId(childId);
+    if(!child) return;
+    const rows=parentIds.map(pid=>{
+      const p=byId(pid);
+      if(!p) return '';
+      return `<div class="merge-row"><span>${escapeHtml(fullName(p))} → ${escapeHtml(fullName(child))}</span>
+        <button class="icon-btn" title="Délier" onclick="deleteParentLink('${childId}','${pid}')">✕</button></div>`;
+    }).join('');
+    openToolSheet(`
+      <h2 style="margin:0 0 10px;font-size:18px;">Lien parent → enfant</h2>
+      ${rows}
+      <button class="btn outline block" style="margin-top:12px;" onclick="closeToolSheet()">Fermer</button>
+    `);
+  }
+}
+async function deleteUnionLink(id1,id2){
+  if(!confirm('Délier ce couple ?')) return;
+  const p1=byId(id1), p2=byId(id2);
+  if(p1){ p1.conjoints=(p1.conjoints||[]).filter(x=>x!==id2); await dbPut(p1); }
+  if(p2){ p2.conjoints=(p2.conjoints||[]).filter(x=>x!==id1); await dbPut(p2); }
+  await reloadPersonsForProjet();
+  closeToolSheet();
+  renderTree();
+  showToast('Couple délié');
+}
+async function deleteParentLink(childId,parentId){
+  if(!confirm('Retirer ce lien parent-enfant ?')) return;
+  const child=byId(childId);
+  if(child){ child.parents=(child.parents||[]).filter(x=>x!==parentId); await dbPut(child); }
+  await reloadPersonsForProjet();
+  closeToolSheet();
+  renderTree();
+  showToast('Lien retiré');
+}
 
 // Liaisons adaptatives : redessiner dès que la taille de l'arbre ou de la fenêtre change
 if(typeof ResizeObserver!=='undefined'){
