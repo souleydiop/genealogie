@@ -190,10 +190,10 @@
     font-family:Georgia,serif;
   }
   .avatar img{width:100%;height:100%;object-fit:cover;}
-  .avatar svg{width:38%;height:38%;fill:var(--primary);opacity:.55;}
-  .avatar .avatar-symbol{font-size:20px;font-weight:600;color:var(--primary);opacity:.6;line-height:1;}
-  .tree-grid.zoom-0 .card .avatar-symbol{font-size:15px;}
-  .tree-grid.zoom-2 .card .avatar-symbol{font-size:24px;}
+  .avatar svg{width:30%;height:30%;fill:var(--primary);opacity:.55;}
+  .avatar .avatar-symbol{font-size:15px;font-weight:600;color:var(--primary);opacity:.6;line-height:1;}
+  .tree-grid.zoom-0 .card .avatar-symbol{font-size:11px;}
+  .tree-grid.zoom-2 .card .avatar-symbol{font-size:18px;}
   .avatar .avatar-gen{font-size:.85em;font-weight:700;letter-spacing:.02em;}
   .person-row .info{flex:1;min-width:0;}
   .person-row .name{font-weight:700;font-size:15px;}
@@ -285,8 +285,9 @@
   .card.sexe-F{border-top:3px solid var(--female);}
   .card.sexe-A{border-top:3px solid var(--autre);}
   svg.connectors{position:absolute;top:0;left:0;pointer-events:none;z-index:1;}
-  .branch{fill:none;stroke:var(--accent);stroke-width:2;opacity:.55;}
-  .union{stroke:var(--primary-light);stroke-width:2;opacity:.5;}
+  .branch{fill:none;stroke:var(--accent);stroke-width:1.25;opacity:.6;}
+  .union{stroke:var(--primary-light);stroke-width:1.25;opacity:.55;}
+  .link-hit{stroke:transparent;stroke-width:16px;pointer-events:stroke;cursor:pointer;}
 
   /* Niveaux de zoom de l'arbre */
   .tree-grid.zoom-0 .gen-row{gap:16px;margin-bottom:34px;}
