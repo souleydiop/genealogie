@@ -845,6 +845,15 @@ function importGedcomAvecLien(file){
   document.getElementById('importGedFileLien').value='';
 }
 
+function personRowHtml(p){
+  const parentsNames=(p.parents||[]).map(pid=>{ const pp=byId(pid); return pp?fullName(pp):''; }).filter(Boolean).join(' & ');
+  const conjointsNames=(p.conjoints||[]).map(cid=>{ const c=byId(cid); return c?fullName(c):''; }).filter(Boolean).join(', ');
+  let filiation='';
+  if(parentsNames) filiation+='Enfant de '+parentsNames+'. ';
+  if(conjointsNames) filiation+='Conjoint(e) de '+conjointsNames+'.';
+  return `<tr><td>${escapeHtml(fullName(p))}</td><td>${escapeHtml(dateRange(p))}</td><td>${escapeHtml(p.lieu||'')}</td><td>${escapeHtml(filiation)}</td></tr>`;
+}
+
 function exportPdf(){
   const gen=computeGenerations();
   const byGen={};
@@ -854,15 +863,40 @@ function exportPdf(){
   let html=`<h1>Arbre Généalogique — ${escapeHtml((currentProjet()||{}).nom||'')}</h1><p class="print-date">Généré le ${new Date().toLocaleDateString('fr-FR')} — ${persons.length} personne(s)</p>`;
   gens.forEach(g=>{
     html+=`<h2>Génération ${g+1}</h2><table><thead><tr><th>Nom</th><th>Dates</th><th>Lieu</th><th>Filiation</th></tr></thead><tbody>`;
-    byGen[g].slice().sort((a,b)=>fullName(a).localeCompare(fullName(b),'fr')).forEach(p=>{
-      const parentsNames=(p.parents||[]).map(pid=>{ const pp=byId(pid); return pp?fullName(pp):''; }).filter(Boolean).join(' & ');
-      const conjointsNames=(p.conjoints||[]).map(cid=>{ const c=byId(cid); return c?fullName(c):''; }).filter(Boolean).join(', ');
-      let filiation='';
-      if(parentsNames) filiation+='Enfant de '+parentsNames+'. ';
-      if(conjointsNames) filiation+='Conjoint(e) de '+conjointsNames+'.';
-      html+=`<tr><td>${escapeHtml(fullName(p))}</td><td>${escapeHtml(dateRange(p))}</td><td>${escapeHtml(p.lieu||'')}</td><td>${escapeHtml(filiation)}</td></tr>`;
-    });
+    byGen[g].slice().sort((a,b)=>fullName(a).localeCompare(fullName(b),'fr')).forEach(p=>{ html+=personRowHtml(p); });
     html+=`</tbody></table>`;
+  });
+
+  document.getElementById('printArea').innerHTML=html;
+  window.print();
+}
+
+// Un PDF par ancêtre fondateur (personne sans parent connu, avec au moins un enfant) :
+// une section par lignée, avec une génération LOCALE à cette lignée (l'ancêtre = 1),
+// séparées par un saut de page. Évite une liste unique de centaines de personnes quand
+// l'arbre regroupe plusieurs lignées distinctes (ex. après une fusion de projets).
+function exportPdfParAncetre(){
+  const racines=persons.filter(p=>(p.parents||[]).length===0 && persons.some(c=>(c.parents||[]).includes(p.id)));
+  if(racines.length===0){ alert("Aucun ancêtre fondateur trouvé (personne sans parent connu, avec au moins un enfant, dans ce projet)."); return; }
+  racines.sort((a,b)=>fullName(a).localeCompare(fullName(b),'fr'));
+
+  let html=`<h1>Arbres généalogiques par ancêtre — ${escapeHtml((currentProjet()||{}).nom||'')}</h1>
+    <p class="print-date">Généré le ${new Date().toLocaleDateString('fr-FR')} — ${racines.length} ancêtre(s) fondateur(s), ${persons.length} personne(s) au total</p>`;
+
+  racines.forEach((racine,idx)=>{
+    const {ids,gen}=getDescendants(racine.id);
+    const byGen={};
+    ids.forEach(id=>{ const p=byId(id); (byGen[gen[id]]=byGen[gen[id]]||[]).push(p); });
+    const gens=Object.keys(byGen).map(Number).sort((a,b)=>a-b);
+    html+=`<div${idx>0?' style="page-break-before:always;"':''}>
+      <h1>${escapeHtml(fullName(racine))}</h1>
+      <p class="print-date">${ids.length} personne(s) dans cette lignée</p>`;
+    gens.forEach(g=>{
+      html+=`<h2>Génération ${g+1}</h2><table><thead><tr><th>Nom</th><th>Dates</th><th>Lieu</th><th>Filiation</th></tr></thead><tbody>`;
+      byGen[g].slice().sort((a,b)=>fullName(a).localeCompare(fullName(b),'fr')).forEach(p=>{ html+=personRowHtml(p); });
+      html+=`</tbody></table>`;
+    });
+    html+=`</div>`;
   });
 
   document.getElementById('printArea').innerHTML=html;

@@ -75,6 +75,28 @@ function computeGenerations(){
   return gen;
 }
 
+// Descendance d'une personne (elle incluse) par filiation stricte (pas les conjoints),
+// avec une génération LOCALE (la personne = 0) pratique pour un export dédié à cette
+// lignée, indépendamment de sa génération dans l'arbre complet.
+function getDescendants(id){
+  if(!byId(id)) return { ids:[], gen:{} };
+  const gen={ [id]:0 };
+  const ids=[id];
+  function addChildren(pid){
+    persons.filter(x=>(x.parents||[]).includes(pid)).forEach(c=>{
+      const g=gen[pid]+1;
+      if(gen[c.id]===undefined || g>gen[c.id]){
+        const isNew=gen[c.id]===undefined;
+        gen[c.id]=g;
+        if(isNew) ids.push(c.id);
+        addChildren(c.id);
+      }
+    });
+  }
+  addChildren(id);
+  return { ids, gen };
+}
+
 // Ancêtres + descendants + conjoints autour d'une personne (vue centrée)
 function getFocusedSet(focusId){
   if(!byId(focusId)) return null;
@@ -186,4 +208,4 @@ function buildLayoutLayers(byGen, maxGen){
 function _setPersons(list){ persons=list; }
 function _getPersons(){ return persons; }
 
-if(typeof module!=='undefined') module.exports={uid,byId,fullName,yearOf,dateRange,escapeHtml,personSubtitle,computeGenerations,getFocusedSet,buildLayoutLayers,_setPersons,_getPersons};
+if(typeof module!=='undefined') module.exports={uid,byId,fullName,yearOf,dateRange,escapeHtml,personSubtitle,computeGenerations,getFocusedSet,getDescendants,buildLayoutLayers,_setPersons,_getPersons};
