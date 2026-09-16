@@ -2,7 +2,7 @@ const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   uid, byId, fullName, yearOf, dateRange, escapeHtml, personSubtitle,
-  computeGenerations, getFocusedSet, buildLayoutLayers, _setPersons
+  computeGenerations, getFocusedSet, getDescendants, buildLayoutLayers, _setPersons
 } = require('../js/model.js');
 
 function person(overrides){
@@ -106,6 +106,36 @@ test('computeGenerations() ignore genManuel absent (comportement automatique inc
   const p = person({ prenom: 'Normal' });
   _setPersons([p]);
   assert.equal(computeGenerations()[p.id], 0);
+});
+
+test('getDescendants() inclut la personne elle-même en génération locale 0, puis ses descendants par filiation', () => {
+  const gp = person({ prenom: 'GrandParent' });
+  const parent = person({ prenom: 'Parent', parents: [gp.id] });
+  const oncle = person({ prenom: 'Oncle', parents: [gp.id] });
+  const enfant = person({ prenom: 'Enfant', parents: [parent.id] });
+  const etranger = person({ prenom: 'SansLien' });
+  _setPersons([gp, parent, oncle, enfant, etranger]);
+
+  const { ids, gen } = getDescendants(gp.id);
+  assert.deepEqual(new Set(ids), new Set([gp.id, parent.id, oncle.id, enfant.id]));
+  assert.equal(gen[gp.id], 0);
+  assert.equal(gen[parent.id], 1);
+  assert.equal(gen[oncle.id], 1);
+  assert.equal(gen[enfant.id], 2);
+  assert.ok(!ids.includes(etranger.id));
+});
+
+test('getDescendants() retourne une liste vide pour un id inconnu', () => {
+  _setPersons([person()]);
+  assert.deepEqual(getDescendants('inconnu'), { ids:[], gen:{} });
+});
+
+test('getDescendants() gère une personne sans descendant', () => {
+  const p1 = person({ prenom: 'Seul' });
+  _setPersons([p1]);
+  const { ids, gen } = getDescendants(p1.id);
+  assert.deepEqual(ids, [p1.id]);
+  assert.deepEqual(gen, { [p1.id]: 0 });
 });
 
 test('getFocusedSet() inclut ancêtres, descendants et conjoints', () => {
