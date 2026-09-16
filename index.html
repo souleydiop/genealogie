@@ -523,7 +523,8 @@
         <div class="data-card">
           <h3>🖨️ Export PDF</h3>
           <p>Génère une liste imprimable de toutes les personnes, groupées par génération. S'ouvre dans la boîte de dialogue d'impression : choisissez "Enregistrer en PDF" comme destination.</p>
-          <button class="btn block secondary" onclick="exportPdf()">Générer un PDF</button>
+          <button class="btn block secondary" onclick="exportPdf()" style="margin-bottom:10px;">Générer un PDF (toutes les personnes)</button>
+          <button class="btn block outline" onclick="exportPdfParAncetre()">Générer un PDF par ancêtre fondateur</button>
         </div>
 
         <div class="data-card">
