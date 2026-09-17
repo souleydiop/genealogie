@@ -181,16 +181,15 @@
   .person-row.sexe-F{border-left-color:var(--female);}
   .person-row.sexe-A{border-left-color:var(--autre);}
   .avatar{
-    width:44px;height:44px;border-radius:50%;
-    background:var(--accent-soft);
+    width:auto;height:auto;min-width:22px;min-height:22px;
     color:var(--primary);
     display:flex;align-items:center;justify-content:center;
     font-weight:700;font-size:15px;
     overflow:hidden;flex-shrink:0;
     font-family:Georgia,serif;
   }
-  .avatar img{width:100%;height:100%;object-fit:cover;}
-  .avatar svg{width:30%;height:30%;fill:var(--primary);opacity:.55;}
+  .avatar img{width:44px;height:44px;object-fit:cover;border-radius:8px;}
+  .avatar svg{width:16px;height:16px;fill:var(--primary);opacity:.55;}
   .avatar .avatar-symbol{font-size:15px;font-weight:600;color:var(--primary);opacity:.6;line-height:1;}
   .tree-grid.zoom-0 .card .avatar-symbol{font-size:11px;}
   .tree-grid.zoom-2 .card .avatar-symbol{font-size:18px;}
@@ -271,14 +270,14 @@
     background:var(--surface);
     border-radius:var(--radius);
     border:1px solid var(--line);
-    padding:10px;
+    padding:6px 8px;
     width:104px;
     text-align:center;
     box-shadow:0 2px 6px rgba(60,40,10,.05);
     position:relative;
     z-index:2;
   }
-  .card .avatar{margin:0 auto 6px;width:48px;height:48px;}
+  .card .avatar{margin:0 auto 3px;min-width:0;min-height:0;}
   .card .name{font-size:12.5px;font-weight:700;line-height:1.2;}
   .card .dates{font-size:10.5px;color:var(--ink-soft);margin-top:3px;}
   .card.sexe-H{border-top:3px solid var(--male);}
@@ -291,18 +290,19 @@
 
   /* Niveaux de zoom de l'arbre */
   .tree-grid.zoom-0 .gen-row{gap:16px;margin-bottom:34px;}
-  .tree-grid.zoom-0 .card{width:78px;padding:6px;}
-  .tree-grid.zoom-0 .card .avatar{width:36px;height:36px;margin-bottom:4px;}
+  .tree-grid.zoom-0 .card{width:78px;padding:5px 6px;}
+  .tree-grid.zoom-0 .card .avatar{margin-bottom:2px;}
+  .tree-grid.zoom-0 .card .avatar img{width:32px;height:32px;}
   .tree-grid.zoom-0 .card .name{font-size:10.5px;}
   .tree-grid.zoom-0 .card .dates{font-size:9px;margin-top:1px;}
   .tree-grid.zoom-0 .gen-label{font-size:9px;}
 
   .tree-grid.zoom-1 .gen-row{gap:28px;margin-bottom:54px;}
-  .tree-grid.zoom-1 .card{width:104px;padding:10px;}
+  .tree-grid.zoom-1 .card{width:104px;padding:6px 8px;}
 
   .tree-grid.zoom-2 .gen-row{gap:40px;margin-bottom:70px;}
-  .tree-grid.zoom-2 .card{width:136px;padding:13px;}
-  .tree-grid.zoom-2 .card .avatar{width:60px;height:60px;}
+  .tree-grid.zoom-2 .card{width:136px;padding:8px 10px;}
+  .tree-grid.zoom-2 .card .avatar img{width:56px;height:56px;}
   .tree-grid.zoom-2 .card .name{font-size:14px;}
   .tree-grid.zoom-2 .card .dates{font-size:12px;}
 
