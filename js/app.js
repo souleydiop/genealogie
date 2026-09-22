@@ -324,14 +324,19 @@ function drawConnectors(){
       y:r.top-cRect.top+r.height/2
     };
   }
-  function addLine(x1,y1,x2,y2,cssClass){
+  function addLine(x1,y1,x2,y2,cssClass,color){
     const line=document.createElementNS('http://www.w3.org/2000/svg','line');
     line.setAttribute('x1',x1);line.setAttribute('y1',y1);
     line.setAttribute('x2',x2);line.setAttribute('y2',y2);
     line.setAttribute('class',cssClass);
+    if(color) line.setAttribute('stroke',color);
     svg.appendChild(line);
     return line;
   }
+  // Palette pour distinguer les fratries dont les traits se croisent : chaque groupe de
+  // frères et sœurs a sa propre couleur plutôt qu'une seule couleur pour tout l'arbre,
+  // pour rester lisible quand plusieurs liaisons s'entrelacent dans une zone chargée.
+  const BRANCH_PALETTE=['#C7923A','#4F7A8B','#B5707A','#5C7C66','#8B5E3C','#7A5C99','#4A90A4','#A45C4A'];
   // parent -> enfants : tracé "chaînette" groupé par fratrie (mêmes parents) — un trait
   // vertical depuis le couple, une barre horizontale commune, puis un trait vertical par
   // enfant. Plus lisible qu'un faisceau de diagonales quand les enfants sont dispersés.
@@ -341,10 +346,11 @@ function drawConnectors(){
     const key=p.parents.slice().sort().join(',');
     (fratries[key]=fratries[key]||[]).push(p.id);
   });
-  Object.entries(fratries).forEach(([key,childIds])=>{
+  Object.entries(fratries).forEach(([key,childIds],idx)=>{
     const parentIds=key.split(',');
     const parentEls=parentIds.map(pid=>cards[pid]).filter(Boolean);
     if(parentEls.length===0) return;
+    const color=BRANCH_PALETTE[idx % BRANCH_PALETTE.length];
     let sumX=0,sumY=0;
     parentEls.forEach(el=>{const c=center(el); sumX+=c.x; sumY+=c.bottom;});
     const px=sumX/parentEls.length, py=sumY/parentEls.length;
@@ -352,12 +358,12 @@ function drawConnectors(){
     const childCenters=childIds.map(id=>({id,...center(cards[id])}));
     const busY=py+(childCenters[0].top-py)/2;
 
-    addLine(px,py,px,busY,'branch'); // trait vertical depuis le couple
+    addLine(px,py,px,busY,'branch',color); // trait vertical depuis le couple
     const xs=childCenters.map(c=>c.x).concat([px]);
-    addLine(Math.min(...xs),busY,Math.max(...xs),busY,'branch'); // barre horizontale
+    addLine(Math.min(...xs),busY,Math.max(...xs),busY,'branch',color); // barre horizontale
 
     childCenters.forEach(c=>{
-      addLine(c.x,busY,c.x,c.top,'branch'); // trait vertical vers l'enfant
+      addLine(c.x,busY,c.x,c.top,'branch',color); // trait vertical vers l'enfant
       const hit=addLine(c.x,busY,c.x,c.top,'link-hit');
       hit.addEventListener('click',()=>openLinkEditSheet('branch',{childId:c.id,parentIds}));
     });
