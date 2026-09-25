@@ -2,7 +2,7 @@ const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   uid, byId, fullName, yearOf, dateRange, escapeHtml, personSubtitle,
-  computeGenerations, getFocusedSet, getDescendants, buildLayoutLayers, _setPersons
+  computeGenerations, getFocusedSet, getDescendants, getAncestors, buildLayoutLayers, _setPersons
 } = require('../js/model.js');
 
 function person(overrides){
@@ -136,6 +136,26 @@ test('getDescendants() gère une personne sans descendant', () => {
   const { ids, gen } = getDescendants(p1.id);
   assert.deepEqual(ids, [p1.id]);
   assert.deepEqual(gen, { [p1.id]: 0 });
+});
+
+test('getAncestors() remonte la lignée (parents, grands-parents) sans descendants ni conjoints', () => {
+  const gp = person({ prenom: 'GrandParent' });
+  const parent = person({ prenom: 'Parent', parents: [gp.id] });
+  const conjointParent = person({ prenom: 'ConjointParent' });
+  parent.conjoints = [conjointParent.id];
+  const soi = person({ prenom: 'Soi', parents: [parent.id] });
+  const enfant = person({ prenom: 'Enfant', parents: [soi.id] });
+  _setPersons([gp, parent, conjointParent, soi, enfant]);
+
+  const ancestors = getAncestors(soi.id);
+  assert.deepEqual(ancestors, new Set([soi.id, parent.id, gp.id]));
+  assert.ok(!ancestors.has(enfant.id), 'ne doit pas inclure les descendants');
+  assert.ok(!ancestors.has(conjointParent.id), 'ne doit pas inclure les conjoints');
+});
+
+test('getAncestors() retourne un ensemble vide pour un id inconnu', () => {
+  _setPersons([person()]);
+  assert.deepEqual(getAncestors('inconnu'), new Set());
 });
 
 test('getFocusedSet() inclut ancêtres, descendants et conjoints', () => {
