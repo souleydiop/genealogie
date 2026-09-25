@@ -97,6 +97,23 @@ function getDescendants(id){
   return { ids, gen };
 }
 
+// Ascendance stricte d'une personne (elle incluse) : parents, grands-parents, etc.
+// Contrairement à getFocusedSet, n'inclut ni descendants ni conjoints — vue "pedigree".
+function getAncestors(id){
+  const p=byId(id);
+  if(!p) return new Set();
+  const set=new Set([id]);
+  function addParents(pid){
+    const person=byId(pid);
+    if(!person) return;
+    (person.parents||[]).forEach(par=>{
+      if(!set.has(par)){ set.add(par); addParents(par); }
+    });
+  }
+  addParents(id);
+  return set;
+}
+
 // Ancêtres + descendants + conjoints autour d'une personne (vue centrée)
 function getFocusedSet(focusId){
   if(!byId(focusId)) return null;
@@ -208,4 +225,4 @@ function buildLayoutLayers(byGen, maxGen){
 function _setPersons(list){ persons=list; }
 function _getPersons(){ return persons; }
 
-if(typeof module!=='undefined') module.exports={uid,byId,fullName,yearOf,dateRange,escapeHtml,personSubtitle,computeGenerations,getFocusedSet,getDescendants,buildLayoutLayers,_setPersons,_getPersons};
+if(typeof module!=='undefined') module.exports={uid,byId,fullName,yearOf,dateRange,escapeHtml,personSubtitle,computeGenerations,getFocusedSet,getDescendants,getAncestors,buildLayoutLayers,_setPersons,_getPersons};

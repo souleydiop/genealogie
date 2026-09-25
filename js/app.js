@@ -101,7 +101,8 @@ function populateTreeFilters(){
   const prevFocus=focusSel.value;
   const sortedP=[...persons].sort((a,b)=>fullName(a).localeCompare(fullName(b)));
   focusSel.innerHTML='<option value="">🌳 Arbre complet</option>'+
-    sortedP.map(p=>`<option value="${p.id}">🎯 Centrer sur ${personOptionLabel(p,gen)}</option>`).join('');
+    sortedP.map(p=>`<option value="${p.id}">🎯 Centrer sur ${personOptionLabel(p,gen)}</option>`).join('')+
+    sortedP.map(p=>`<option value="asc:${p.id}">⬆️ Ascendants de ${personOptionLabel(p,gen)}</option>`).join('');
   if(sortedP.some(p=>p.id===prevFocus)) focusSel.value=prevFocus;
 
   const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
@@ -173,11 +174,13 @@ function renderTree(){
   const gen=computeGenerations();
   const maxGen=Math.max(...Object.values(gen));
 
-  const focusId=document.getElementById('treeFocus').value;
+  const rawFocus=document.getElementById('treeFocus').value;
+  const ascMode=rawFocus.startsWith('asc:');
+  const focusId=ascMode ? rawFocus.slice(4) : rawFocus;
   const fromSel=document.getElementById('genFrom'), toSel=document.getElementById('genTo');
   const genFrom=(+fromSel.value||1)-1;
   const genTo=(+toSel.value||(maxGen+1))-1;
-  const focusSet = focusId ? getFocusedSet(focusId) : null;
+  const focusSet = focusId ? (ascMode ? getAncestors(focusId) : getFocusedSet(focusId)) : null;
 
   const byGen={};
   for(let g=0;g<=maxGen;g++) byGen[g]=[];
